@@ -86,4 +86,5 @@ delete_table(doc.tables[1])
 
 doc.save(f'./dist/{filename}')
 
+print('File created: ', f'./dist/{filename}')
 
