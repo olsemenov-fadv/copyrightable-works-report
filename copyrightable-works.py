@@ -8,8 +8,9 @@ from datetime import datetime
 from pathlib import Path
 from copy import deepcopy
 
-load_dotenv();
-
+if not load_dotenv(): 
+    print('No .env file found. Please create one in the root directory of this project.')
+    exit(-1)
 
 name = os.environ.get('NAME')
 approver = os.environ.get('APPROVER')

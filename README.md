@@ -6,8 +6,11 @@ The Copyrightable Works Report Generator is a simple Python application that che
 
 Before you can use this application, make sure you have the following installed:
 
-- Python (3.6 or higher)
+- Python (3.11 or higher)
 - `pip` package manager
+
+> **Note:**
+> You can install Python from Microsoft Store, it should automatically add the python interpreter to your PATH variables
 
 ## Installation
 
@@ -32,7 +35,17 @@ Create a .env file in the project directory with the following environment varia
 - APPROVER: Your report's approver's name.
 - AUTHOR: Your git username.
 - AUTHOR_EMAIL: Your git email.
-- REPOS: comma separated paths to repositories (e.g., `C:/programming/repo-1,C:/programming/repo-2`).
+- REPOS: comma separated paths to repositories.
+
+### Example .env file
+
+```
+NAME=John Doe
+APPROVER=Jane Doe
+AUTHOR=jdoe-fadv
+AUTHOR_EMAIL=john.doe@fadv.com
+REPOS=C:/programming/repo-1,C:/programming/repo-2
+```
 
 ## Usage
 
