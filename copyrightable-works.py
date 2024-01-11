@@ -12,11 +12,11 @@ if not load_dotenv():
     print('No .env file found. Please create one in the root directory of this project.')
     exit(-1)
 
-name = os.environ.get('NAME')
-approver = os.environ.get('APPROVER')
-author = os.environ.get('AUTHOR')
-author_email = os.environ.get('AUTHOR_EMAIL')
-repos = os.environ.get('REPOS').split(',')
+name = os.environ.get('NAME').strip()
+approver = os.environ.get('APPROVER').strip()
+author = os.environ.get('AUTHOR').strip()
+author_email = os.environ.get('AUTHOR_EMAIL').strip()
+repos = os.environ.get('REPOS').replace(' ', '').split(',')
 filename = f'{datetime.today().year}.{str(datetime.today().month).zfill(2)}_{name.replace(" ", "_")}.docx'
 
 
