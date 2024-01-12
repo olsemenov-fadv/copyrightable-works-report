@@ -1,6 +1,6 @@
 # Copyrightable Works Report Generator
 
-The Copyrightable Works Report Generator is a simple Python application that checks for commits in specified repositories and generates a DOCX document containing a copyrightable works report based on those commits. This report is designed to capture and document your contributions and activities for a specific reporting month.
+The Copyrightable Works Report Generator is a simple Python application that checks for commits in specified repositories and generates a DOCX document containing a copyrightable works report based on those commits. This report is designed to capture and document your contributions and activities for a current reporting month.
 
 ## Prerequisites
 
