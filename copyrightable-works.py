@@ -50,6 +50,10 @@ def get_commits_command():
     return f'git log origin/main --author={author_email} --author={author} --since=\'{month_start_date}\' --reverse'
 
 
+def fetch_repository():
+    return f'git fetch'
+
+
 def add_hyperlink(paragraph, url, text):
     part = paragraph.part
     r_id = part.relate_to(url, docx.opc.constants.RELATIONSHIP_TYPE.HYPERLINK, is_external=True)
@@ -72,6 +76,7 @@ def add_hyperlink(paragraph, url, text):
 
 for repo in repos:
     remote_url = run_command_in_repo('git config --get remote.origin.url', repo).strip().replace('.git', '').replace('git@github.com:', 'https://github.com/')
+    run_command_in_repo(fetch_repository(), repo)
     commits = run_command_in_repo(get_commits_command(), repo)
     if (commits): print('Found commits: ', remote_url)
     if commits:
