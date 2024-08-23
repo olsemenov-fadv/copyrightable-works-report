@@ -50,8 +50,8 @@ def get_commits_command():
     return f'git log origin/main --author={author_email} --author={author} --since=\'{month_start_date}\' --reverse'
 
 
-def fetch_repository(remote_url):
-    print('Getting recent logs with `git fetch` in repository:', remote_url)
+def fetch_repository(repo_name):
+    print('Running `git fetch` to get recent logs in directory:', repo_name)
     return f'git fetch'
 
 
