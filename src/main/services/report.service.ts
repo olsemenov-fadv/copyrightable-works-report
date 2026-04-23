@@ -1,0 +1,503 @@
+import {
+  BorderStyle,
+  ExternalHyperlink,
+  Paragraph,
+  patchDocument,
+  PatchType,
+  ShadingType,
+  Table,
+  TableCell,
+  TableLayoutType,
+  TableRow,
+  TextRun,
+  VerticalAlignTable,
+  WidthType,
+} from "docx";
+import {
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  unlinkSync,
+} from "fs";
+import path from "node:path";
+import { app } from "electron";
+import type {
+  GenerateReportParams,
+  AddReportToHistoryParams,
+  ReportHistoryEntry,
+  ReportHistory,
+} from "../../shared/types/report.types";
+import { fileURLToPath } from "node:url";
+import libre from "libreoffice-convert";
+
+/**
+ * Service responsible for generating DOCX reports from repository commit data
+ */
+export class ReportService {
+  private readonly tableConfig = {
+    width: { size: 100, type: WidthType.PERCENTAGE },
+    columnWidths: [(1.32 / 6.5) * 100, (5.18 / 6.5) * 100],
+    borderStyle: { style: BorderStyle.SINGLE, size: 8, color: "000000" },
+    headerCell: {
+      shading: {
+        color: "f2f2f2",
+        fill: "f2f2f2",
+        type: ShadingType.SOLID,
+      },
+    },
+    cellConfig: {
+      verticalAlign: VerticalAlignTable.TOP,
+      margins: {
+        left: 100,
+        right: 100,
+      },
+    },
+  };
+
+  private _templatePath: string | null = null;
+  private _reportsDir: string | null = null;
+  private _historyPath: string | null = null;
+
+  private get templatePath(): string {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, "template.docx");
+    } else {
+      return path.resolve(
+        path.dirname(fileURLToPath(import.meta.url)),
+        "../../assets/template.docx",
+      );
+    }
+  }
+
+  private get reportsDir(): string {
+    if (!this._reportsDir) {
+      this._reportsDir = path.join(app.getPath("userData"), "reports");
+      // Ensure reports directory exists
+      if (!existsSync(this._reportsDir)) {
+        mkdirSync(this._reportsDir, { recursive: true });
+      }
+    }
+    return this._reportsDir;
+  }
+
+  private get historyPath(): string {
+    if (!this._historyPath) {
+      this._historyPath = path.join(
+        app.getPath("userData"),
+        "report-history.json",
+      );
+    }
+    return this._historyPath;
+  }
+
+  /**
+   * Generates a DOCX report from repository commit data
+   */
+  async generateReport(params: GenerateReportParams): Promise<Buffer> {
+    const updatedTemplate = await this.updateReport(params);
+    return updatedTemplate;
+  }
+
+  /**
+   * Generates a PDF report by converting DOCX to PDF
+   * Requires LibreOffice to be installed on the system
+   */
+  async generatePdfReport(params: GenerateReportParams): Promise<Buffer> {
+    const docxBuffer = await this.generateReport(params);
+
+    return new Promise((resolve, reject) => {
+      libre.convert(docxBuffer, ".pdf", undefined, (err, result) => {
+        if (err) {
+          reject(
+            new Error(
+              `PDF conversion failed. Make sure LibreOffice is installed. Error: ${err.message}`,
+            ),
+          );
+        } else {
+          resolve(result);
+        }
+      });
+    });
+  }
+
+  /**
+   * Adds a report to history immediately (without generating DOCX)
+   */
+  addReportToHistory(params: AddReportToHistoryParams): ReportHistoryEntry {
+    const timestamp = new Date();
+
+    // Calculate total commits
+    const totalCommits = params.repositoriesData.reduce(
+      (sum, repo) => sum + repo.commitCount,
+      0,
+    );
+
+    // Create history entry with status based on commits
+    const historyEntry: ReportHistoryEntry = {
+      id: Date.now().toString(),
+      fileName: "",
+      filePath: "",
+      createdAt: timestamp.toISOString(),
+      authorName: params.fullName,
+      reportingMonth: this.getReportingMonth(),
+      sinceDate: params.sinceDate,
+      repositoryCount: params.repositoriesData.filter((r) => r.commits).length,
+      totalCommits,
+      status: totalCommits > 0 ? "has-commits" : "no-commits",
+      repositoriesData: params.repositoriesData,
+    };
+
+    // Add to history
+    this.addToHistory(historyEntry);
+
+    return historyEntry;
+  }
+
+  /**
+   * Gets a report by its ID
+   */
+  getReportById(id: string): ReportHistoryEntry | null {
+    const history = this.getHistory();
+    return history.entries.find((e) => e.id === id) || null;
+  }
+
+  /**
+   * Creates a DOCX document for an existing history entry
+   */
+  async createDocumentForReport(
+    id: string,
+    approver?: string,
+  ): Promise<ReportHistoryEntry | null> {
+    const history = this.getHistory();
+    const entryIndex = history.entries.findIndex((e) => e.id === id);
+
+    if (entryIndex === -1) {
+      return null;
+    }
+
+    const entry = history.entries[entryIndex];
+    const docxBuffer = await this.generateReport({
+      fullName: entry.authorName,
+      approver,
+      repositoriesData: entry.repositoriesData,
+    });
+
+    // Generate filename with timestamp
+    const timestamp = new Date();
+    const dateStr = timestamp.toISOString().split("T")[0];
+    const timeStr = timestamp.toTimeString().split(" ")[0].replace(/:/g, "-");
+    const fileName = `report_${dateStr}_${timeStr}.docx`;
+    const filePath = path.join(this.reportsDir, fileName);
+
+    // Save the file
+    writeFileSync(filePath, docxBuffer);
+
+    // Update the entry
+    entry.fileName = fileName;
+    entry.filePath = filePath;
+
+    // Save updated history
+    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
+
+    return entry;
+  }
+
+  /**
+   * Generates a report, saves it to disk, and adds it to history
+   */
+  async generateAndSaveReport(
+    params: GenerateReportParams,
+  ): Promise<ReportHistoryEntry> {
+    const docxBuffer = await this.generateReport(params);
+
+    // Generate filename with timestamp
+    const timestamp = new Date();
+    const dateStr = timestamp.toISOString().split("T")[0];
+    const timeStr = timestamp.toTimeString().split(" ")[0].replace(/:/g, "-");
+    const fileName = `report_${dateStr}_${timeStr}.docx`;
+    const filePath = path.join(this.reportsDir, fileName);
+
+    // Save the file
+    writeFileSync(filePath, docxBuffer);
+
+    // Calculate total commits
+    const totalCommits = params.repositoriesData.reduce(
+      (sum, repo) => sum + repo.commitCount,
+      0,
+    );
+
+    // Create history entry
+    const historyEntry: ReportHistoryEntry = {
+      id: Date.now().toString(),
+      fileName,
+      filePath,
+      createdAt: timestamp.toISOString(),
+      authorName: params.fullName,
+      reportingMonth: this.getReportingMonth(),
+      sinceDate: "",
+      repositoryCount: params.repositoriesData.filter((r) => r.commits).length,
+      totalCommits,
+      status: totalCommits > 0 ? "has-commits" : "no-commits",
+      repositoriesData: params.repositoriesData,
+    };
+
+    // Add to history
+    this.addToHistory(historyEntry);
+
+    return historyEntry;
+  }
+
+  /**
+   * Gets the current reporting month string
+   */
+  private getReportingMonth(): string {
+    const now = new Date();
+    return `${now.toLocaleString("en-US", { month: "long" })} ${now.getFullYear()}`;
+  }
+
+  /**
+   * Retrieves all report history entries
+   */
+  getHistory(): ReportHistory {
+    if (!existsSync(this.historyPath)) {
+      return { entries: [] };
+    }
+
+    try {
+      const data = readFileSync(this.historyPath, "utf-8");
+      return JSON.parse(data) as ReportHistory;
+    } catch (error) {
+      console.error("Error reading report history:", error);
+      return { entries: [] };
+    }
+  }
+
+  /**
+   * Adds a new entry to the history
+   */
+  private addToHistory(entry: ReportHistoryEntry): void {
+    const history = this.getHistory();
+    history.entries.unshift(entry); // Add to the beginning
+
+    // Keep only the last 50 entries
+    if (history.entries.length > 50) {
+      history.entries = history.entries.slice(0, 50);
+    }
+
+    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
+  }
+
+  /**
+   * Gets a report file by its path
+   */
+  getReportFile(filePath: string): Buffer | null {
+    if (!existsSync(filePath)) {
+      return null;
+    }
+
+    return readFileSync(filePath);
+  }
+
+  /**
+   * Deletes a report from history and disk
+   */
+  deleteReport(id: string): boolean {
+    const history = this.getHistory();
+    const entryIndex = history.entries.findIndex((e) => e.id === id);
+
+    if (entryIndex === -1) {
+      return false;
+    }
+
+    const entry = history.entries[entryIndex];
+
+    // Delete the file if it exists
+    if (existsSync(entry.filePath)) {
+      unlinkSync(entry.filePath);
+    }
+
+    // Remove from history
+    history.entries.splice(entryIndex, 1);
+    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
+
+    return true;
+  }
+
+  /**
+   * Updates the report template with the provided data
+   */
+  private updateReport(params: GenerateReportParams): Promise<Buffer> {
+    const repositoriesData = params.repositoriesData.map((repo) => ({
+      repositoryLink: repo.repositoryLink,
+      commits: repo.commits,
+    }));
+
+    const document = patchDocument({
+      outputType: "nodebuffer",
+      data: readFileSync(this.templatePath),
+      keepOriginalStyles: true,
+      patches: {
+        employeeName: {
+          type: PatchType.PARAGRAPH,
+          children: [new TextRun(this.sanitizeForDocx(params.fullName))],
+        },
+        approver: {
+          type: PatchType.PARAGRAPH,
+          children: [new TextRun(this.sanitizeForDocx(params.approver || ""))],
+        },
+        reportingMonth: {
+          type: PatchType.PARAGRAPH,
+          children: [new TextRun(this.getReportingMonth())],
+        },
+        table: {
+          type: PatchType.DOCUMENT,
+          children: this.generateCommitsTables(repositoriesData),
+        },
+      },
+    });
+
+    return document;
+  }
+
+  /**
+   * Generates tables for all repositories with commits
+   */
+  private generateCommitsTables(
+    repositoriesData: { repositoryLink: string; commits: string }[],
+  ) {
+    return repositoriesData
+      .filter((entry) => !!entry.commits)
+      .flatMap((entry) =>
+        this.createRepositoryEntry(entry.repositoryLink, entry.commits),
+      );
+  }
+
+  /**
+   * Creates a table entry for a single repository
+   */
+  private createRepositoryEntry(
+    repositoryLink: string,
+    commits: string,
+  ): Array<Table | Paragraph> {
+    const borderStyle = this.tableConfig.borderStyle;
+
+    const table = new Table({
+      width: this.tableConfig.width,
+      columnWidths: this.tableConfig.columnWidths,
+      margins: { left: 0 },
+      layout: TableLayoutType.FIXED,
+      borders: {
+        top: borderStyle,
+        bottom: borderStyle,
+        left: borderStyle,
+        right: borderStyle,
+        insideHorizontal: borderStyle,
+        insideVertical: borderStyle,
+      },
+      rows: [
+        this.getRepositoryLinkRow(repositoryLink),
+        this.getCommitsRow(commits),
+      ],
+    });
+
+    return [table, new Paragraph("")];
+  }
+
+  /**
+   * Creates the repository link row
+   */
+  private getRepositoryLinkRow(repositoryLink: string): TableRow {
+    const sanitizedLink = this.sanitizeForDocx(repositoryLink);
+    return new TableRow({
+      children: [
+        this.headerCell("Repository Link"),
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: [
+                new ExternalHyperlink({
+                  children: [
+                    new TextRun({
+                      text: sanitizedLink,
+                      style: "Hyperlink",
+                      color: "0000FF",
+                      underline: {
+                        color: "0000FF",
+                      },
+                    }),
+                  ],
+                  link: repositoryLink,
+                }),
+              ],
+            }),
+          ],
+          ...this.tableConfig.cellConfig,
+        }),
+      ],
+    });
+  }
+
+  private sanitizeForDocx(text: string): string {
+    let sanitized = text.replace(/\uFFFD/g, "");
+    sanitized = sanitized.replace(/[\uD800-\uDFFF]/g, "");
+
+    // eslint-disable-next-line no-control-regex
+    sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
+
+    sanitized = sanitized.replace(/[\uFFFE\uFFFF]/g, "");
+
+    return sanitized;
+  }
+
+  /**
+   * Creates the commits row with formatted commit messages
+   */
+  private getCommitsRow(commits: string): TableRow {
+    const [firstLine, ...restLines] = commits.split("\n");
+
+    const formattedCommits = [
+      new TextRun({ text: this.sanitizeForDocx(firstLine) }),
+      ...restLines.map(
+        (line) => new TextRun({ break: 1, text: this.sanitizeForDocx(line) }),
+      ),
+    ];
+
+    return new TableRow({
+      children: [
+        this.headerCell("Commits"),
+        new TableCell({
+          children: [
+            new Paragraph({
+              children: formattedCommits,
+            }),
+          ],
+          ...this.tableConfig.cellConfig,
+        }),
+      ],
+    });
+  }
+
+  /**
+   * Creates a header cell with bold text and shading
+   */
+  private headerCell(text: string): TableCell {
+    return new TableCell({
+      children: [
+        new Paragraph({
+          children: [
+            new TextRun({
+              text,
+              bold: true,
+            }),
+          ],
+        }),
+      ],
+      ...this.tableConfig.cellConfig,
+      shading: this.tableConfig.headerCell.shading,
+    });
+  }
+}
+
+// Export singleton instance
+export const reportService = new ReportService();
