@@ -136,9 +136,11 @@ export function registerReportHandlers(): void {
         const extension = isPdf ? "pdf" : "docx";
         const filterName = isPdf ? "PDF Documents" : "Word Documents";
 
-        // Generate default filename
-        const dateStr = new Date().toISOString().split("T")[0];
-        const defaultFileName = `report_${dateStr}.${extension}`;
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, "0");
+        const nameSuffix = entry.authorName.trim().replaceAll(/\s+/g, "_");
+        const defaultFileName = `${year}.${month}_${nameSuffix}.${extension}`;
 
         const result = await dialog.showSaveDialog({
           title: `Export Report as ${extension.toUpperCase()}`,

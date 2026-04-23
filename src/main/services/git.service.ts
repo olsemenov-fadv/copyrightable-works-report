@@ -1,13 +1,10 @@
-import { exec } from "node:child_process";
-import { promisify } from "node:util";
+import simpleGit, { type DefaultLogFields } from "simple-git";
 import path from "node:path";
 import type {
   RepositoryCommitData,
   GetReportParams,
   GitUserConfig,
 } from "../../shared/types";
-
-const execAsync = promisify(exec);
 
 /**
  * Service responsible for Git operations
@@ -18,14 +15,15 @@ export class GitService {
    */
   async getUserConfig(): Promise<GitUserConfig> {
     try {
-      const [nameResult, emailResult] = await Promise.all([
-        execAsync("git config --global user.name"),
-        execAsync("git config --global user.email"),
+      const git = simpleGit();
+      const [name, email] = await Promise.all([
+        git.raw(["config", "--global", "user.name"]),
+        git.raw(["config", "--global", "user.email"]),
       ]);
 
       return {
-        name: nameResult.stdout.trim(),
-        email: emailResult.stdout.trim(),
+        name: name.trim(),
+        email: email.trim(),
       };
     } catch (error) {
       console.warn("Could not get git user config:", error);
@@ -62,7 +60,6 @@ export class GitService {
     repositoryPath: string,
     sinceDate?: string,
   ): Promise<RepositoryCommitData> {
-    // Fetch latest changes from remote
     await this.fetch(repositoryPath);
 
     const repositoryLink = await this.getRemoteUrl(repositoryPath);
@@ -88,10 +85,7 @@ export class GitService {
    */
   private async fetch(repositoryPath: string): Promise<void> {
     try {
-      await execAsync("git fetch", {
-        cwd: repositoryPath,
-        encoding: "utf-8",
-      });
+      await simpleGit(repositoryPath).fetch();
     } catch (error) {
       console.warn(`Could not fetch in ${repositoryPath}:`, error);
     }
@@ -102,16 +96,11 @@ export class GitService {
    */
   private async getRemoteUrl(repositoryPath: string): Promise<string> {
     try {
-      const { stdout: url } = await execAsync(
-        "git config --get remote.origin.url",
-        {
-          cwd: repositoryPath,
-          encoding: "utf-8",
-        },
-      );
+      const remotes = await simpleGit(repositoryPath).getRemotes(true);
+      const origin = remotes.find((r) => r.name === "origin");
+      const url = origin?.refs?.fetch ?? "";
 
       return url
-        .trim()
         .replace(".git", "")
         .replace("git@github.com:", "https://github.com/")
         .replace("git@gitlab.com:", "https://gitlab.com/")
@@ -132,26 +121,23 @@ export class GitService {
     sinceDate?: string,
   ): Promise<string> {
     try {
-      // Calculate default since date (first day of current month)
       const effectiveSinceDate = sinceDate || this.getDefaultSinceDate();
-
-      // Determine the default branch
       const defaultBranch = await this.getDefaultBranch(repositoryPath);
 
-      const { stdout: commits } = await execAsync(
-        `git log origin/${defaultBranch} --author="${authorEmail}" --author="${author}" --since='${effectiveSinceDate}' --reverse`,
-        {
-          cwd: repositoryPath,
-          encoding: "utf-8",
-          maxBuffer: 50 * 1024 * 1024, // 50MB buffer for large repos
-        },
-      );
+      const logResult = await simpleGit(repositoryPath).log([
+        `origin/${defaultBranch}`,
+        `--author=${authorEmail}`,
+        `--author=${author}`,
+        `--since=${effectiveSinceDate}`,
+        "--reverse",
+      ]);
 
-      if (commits.trim()) {
+      if (logResult.all.length > 0) {
         console.log(`Found commits in ${repositoryPath}`);
+        return this.formatLogOutput(logResult.all);
       }
 
-      return commits.trim();
+      return "";
     } catch (error) {
       console.warn(`Could not get commits for ${repositoryPath}:`, error);
       return "";
@@ -159,36 +145,49 @@ export class GitService {
   }
 
   /**
+   * Formats structured log entries into a git-log-style string
+   */
+  private formatLogOutput(commits: readonly DefaultLogFields[]): string {
+    return commits
+      .map((commit) => {
+        const lines = [
+          `commit ${commit.hash}`,
+          `Author: ${commit.author_name} <${commit.author_email}>`,
+          `Date:   ${commit.date}`,
+          "",
+          `    ${commit.message}`,
+        ];
+        if (commit.body) {
+          lines.push("", commit.body);
+        }
+        return lines.join("\n");
+      })
+      .join("\n\n");
+  }
+
+  /**
    * Determines the default branch of a repository
    */
   private async getDefaultBranch(repositoryPath: string): Promise<string> {
-    try {
-      // Try to get the default branch from remote HEAD
-      const { stdout } = await execAsync(
-        "git symbolic-ref refs/remotes/origin/HEAD",
-        {
-          cwd: repositoryPath,
-          encoding: "utf-8",
-        },
-      );
+    const git = simpleGit(repositoryPath);
 
-      // Extract branch name from refs/remotes/origin/main
-      const match = stdout.trim().match(/refs\/remotes\/origin\/(.+)/);
+    try {
+      const result = await git.raw([
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+      ]);
+      const match = result.trim().match(/refs\/remotes\/origin\/(.+)/);
       if (match) {
         return match[1];
       }
     } catch {
       // Fallback: check if main or master exists
       try {
-        await execAsync("git show-ref --verify refs/remotes/origin/main", {
-          cwd: repositoryPath,
-        });
+        await git.raw(["show-ref", "--verify", "refs/remotes/origin/main"]);
         return "main";
       } catch {
         try {
-          await execAsync("git show-ref --verify refs/remotes/origin/master", {
-            cwd: repositoryPath,
-          });
+          await git.raw(["show-ref", "--verify", "refs/remotes/origin/master"]);
           return "master";
         } catch {
           // Default to main
@@ -210,7 +209,7 @@ export class GitService {
   }
 
   /**
-   * Counts the number of commits in a git log output
+   * Counts the number of commits in a formatted log string
    */
   private countCommits(commitsLog: string): number {
     if (!commitsLog.trim()) {

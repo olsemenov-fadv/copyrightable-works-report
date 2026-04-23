@@ -183,11 +183,7 @@ export class ReportService {
       repositoriesData: entry.repositoriesData,
     });
 
-    // Generate filename with timestamp
-    const timestamp = new Date();
-    const dateStr = timestamp.toISOString().split("T")[0];
-    const timeStr = timestamp.toTimeString().split(" ")[0].replace(/:/g, "-");
-    const fileName = `report_${dateStr}_${timeStr}.docx`;
+    const fileName = this.generateFileName(entry.authorName);
     const filePath = path.join(this.reportsDir, fileName);
 
     // Save the file
@@ -211,11 +207,7 @@ export class ReportService {
   ): Promise<ReportHistoryEntry> {
     const docxBuffer = await this.generateReport(params);
 
-    // Generate filename with timestamp
-    const timestamp = new Date();
-    const dateStr = timestamp.toISOString().split("T")[0];
-    const timeStr = timestamp.toTimeString().split(" ")[0].replace(/:/g, "-");
-    const fileName = `report_${dateStr}_${timeStr}.docx`;
+    const fileName = this.generateFileName(params.fullName);
     const filePath = path.join(this.reportsDir, fileName);
 
     // Save the file
@@ -232,7 +224,7 @@ export class ReportService {
       id: Date.now().toString(),
       fileName,
       filePath,
-      createdAt: timestamp.toISOString(),
+      createdAt: new Date().toISOString(),
       authorName: params.fullName,
       reportingMonth: this.getReportingMonth(),
       sinceDate: "",
@@ -246,6 +238,17 @@ export class ReportService {
     this.addToHistory(historyEntry);
 
     return historyEntry;
+  }
+
+  /**
+   * Generates a filename in the format YYYY.MM_FirstName_LastName.docx
+   */
+  private generateFileName(fullName: string): string {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const nameSuffix = fullName.trim().replaceAll(/\s+/g, "_");
+    return `${year}.${month}_${nameSuffix}.docx`;
   }
 
   /**

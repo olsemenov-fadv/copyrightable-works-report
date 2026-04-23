@@ -46,6 +46,7 @@
     "electron-squirrel-startup": "^1.0.1",
     "libreoffice-convert": "^1.8.0",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "simple-git": "^3.36.0"
   }
 }
