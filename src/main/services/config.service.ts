@@ -14,9 +14,7 @@ export class ConfigService {
     try {
       const approver =
         databaseService.getConfigValue("approver") ?? DEFAULT_CONFIG.approver;
-      const sinceDate =
-        databaseService.getConfigValue("sinceDate") ?? undefined;
-      return { approver, sinceDate };
+      return { approver };
     } catch (error) {
       console.error("Error reading config:", error);
       return { ...DEFAULT_CONFIG };
@@ -30,9 +28,6 @@ export class ConfigService {
     try {
       if (config.approver !== undefined) {
         databaseService.setConfigValue("approver", config.approver);
-      }
-      if (config.sinceDate !== undefined) {
-        databaseService.setConfigValue("sinceDate", config.sinceDate);
       }
     } catch (error) {
       console.error("Error saving config:", error);

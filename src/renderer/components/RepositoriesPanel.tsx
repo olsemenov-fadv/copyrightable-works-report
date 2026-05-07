@@ -20,7 +20,7 @@ interface RepositoriesPanelProps {
   canGenerate: boolean;
   onAddRepo: (repo: GithubRepository) => void;
   onRemoveRepo: (fullName: string) => void;
-  onGenerateReport: () => void;
+  onGenerateReport: (sinceDate?: string, untilDate?: string) => void;
 }
 
 export function RepositoriesPanel({
@@ -36,6 +36,19 @@ export function RepositoriesPanel({
 }: RepositoriesPanelProps) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [dateMode, setDateMode] = useState<"current-month" | "custom">(
+    "current-month",
+  );
+  const [customStart, setCustomStart] = useState("");
+  const [customEnd, setCustomEnd] = useState("");
+
+  const handleGenerate = () => {
+    if (dateMode === "current-month") {
+      onGenerateReport(undefined, undefined);
+    } else {
+      onGenerateReport(customStart || undefined, customEnd || undefined);
+    }
+  };
 
   const activeSet = useMemo(
     () => new Set(activeRepos.map((r) => r.fullName)),
@@ -48,8 +61,7 @@ export function RepositoriesPanel({
       if (activeSet.has(r.fullName)) return false;
       if (!q) return true;
       return (
-        r.name.toLowerCase().includes(q) ||
-        r.fullName.toLowerCase().includes(q)
+        r.name.toLowerCase().includes(q) || r.fullName.toLowerCase().includes(q)
       );
     });
   }, [availableRepos, activeSet, search]);
@@ -201,21 +213,49 @@ export function RepositoriesPanel({
         )}
       </div>
 
-      <div className="panel-footer">
-        <span className="panel-footer-info">
-          {activeRepos.length > 0 ? (
-            <>
-              Report will include{" "}
-              <strong>{activeRepos.length}</strong>{" "}
-              {activeRepos.length === 1 ? "repository" : "repositories"}
-            </>
-          ) : (
-            "No active repositories"
+      <div className="panel-footer panel-footer--generate">
+        {/* Date range segmented control */}
+        <div className="date-range-control">
+          <div className="date-range-toggle">
+            <button
+              type="button"
+              className={`date-range-toggle-btn${dateMode === "current-month" ? " date-range-toggle-btn--active" : ""}`}
+              onClick={() => setDateMode("current-month")}
+            >
+              Current month
+            </button>
+            <button
+              type="button"
+              className={`date-range-toggle-btn${dateMode === "custom" ? " date-range-toggle-btn--active" : ""}`}
+              onClick={() => setDateMode("custom")}
+            >
+              Custom range
+            </button>
+          </div>
+
+          {dateMode === "custom" && (
+            <div className="date-range-inputs">
+              <input
+                type="date"
+                className="config-input"
+                value={customStart}
+                onChange={(e) => setCustomStart(e.target.value)}
+              />
+              <span className="date-range-inputs-sep">→</span>
+              <input
+                type="date"
+                className="config-input"
+                value={customEnd}
+                onChange={(e) => setCustomEnd(e.target.value)}
+              />
+            </div>
           )}
-        </span>
+        </div>
+
+        {/* Generate button */}
         <button
           className="btn btn-primary"
-          onClick={onGenerateReport}
+          onClick={handleGenerate}
           disabled={!canGenerate || isGenerating}
         >
           {isGenerating ? (
@@ -231,5 +271,3 @@ export function RepositoriesPanel({
     </div>
   );
 }
-
-

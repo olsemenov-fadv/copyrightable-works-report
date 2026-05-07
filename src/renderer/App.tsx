@@ -205,50 +205,57 @@ export function App() {
 
   // ─── Report generation (from all active repos) ─────────────────────────────
 
-  const handleGenerateReport = useCallback(async () => {
-    if (!connectedGithubUser) {
-      showNotification(
-        "Connect your GitHub account in Settings first.",
-        "Go to Settings",
-        () => setActiveView("config"),
-      );
-      return;
-    }
-    if (activeRepos.length === 0) {
-      showNotification("Add at least one repository to generate a report.");
-      return;
-    }
+  const handleGenerateReport = useCallback(
+    async (sinceDate?: string, untilDate?: string) => {
+      if (!connectedGithubUser) {
+        showNotification(
+          "Connect your GitHub account in Settings first.",
+          "Go to Settings",
+          () => setActiveView("config"),
+        );
+        return;
+      }
+      if (activeRepos.length === 0) {
+        showNotification("Add at least one repository to generate a report.");
+        return;
+      }
 
-    setIsGenerating(true);
-    try {
-      const repositoriesData = await window.electronAPI.getGithubReport({
-        authorLogin: connectedGithubUser.login,
-        repositoryFullNames: activeRepos.map((r) => r.fullName),
-        sinceDate: config.sinceDate,
-      });
+      setIsGenerating(true);
+      try {
+        const repositoriesData = await window.electronAPI.getGithubReport({
+          authorLogin: connectedGithubUser.login,
+          repositoryFullNames: activeRepos.map((r) => r.fullName),
+          sinceDate,
+          untilDate,
+        });
 
-      const historyEntry = await window.electronAPI.addReportToHistory({
-        fullName: connectedGithubUser.name || connectedGithubUser.login,
-        sinceDate:
-          config.sinceDate ||
+        const effectiveSinceDate =
+          sinceDate ||
           new Date(new Date().getFullYear(), new Date().getMonth(), 1)
             .toISOString()
-            .slice(0, 10),
-        repositoriesData,
-      });
+            .slice(0, 10);
 
-      setCurrentReport(historyEntry);
-      setHistoryRefreshTrigger((n) => n + 1);
-      setActiveView("reports");
-    } catch (err) {
-      console.error("Failed to generate report:", err);
-      showNotification(
-        err instanceof Error ? err.message : "Failed to generate report.",
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  }, [connectedGithubUser, activeRepos, config.sinceDate]);
+        const historyEntry = await window.electronAPI.addReportToHistory({
+          fullName: connectedGithubUser.name || connectedGithubUser.login,
+          sinceDate: effectiveSinceDate,
+          untilDate,
+          repositoriesData,
+        });
+
+        setCurrentReport(historyEntry);
+        setHistoryRefreshTrigger((n) => n + 1);
+        setActiveView("reports");
+      } catch (err) {
+        console.error("Failed to generate report:", err);
+        showNotification(
+          err instanceof Error ? err.message : "Failed to generate report.",
+        );
+      } finally {
+        setIsGenerating(false);
+      }
+    },
+    [connectedGithubUser, activeRepos],
+  );
 
   // ─── Report detail handlers ─────────────────────────────────────────────
 
@@ -367,10 +374,8 @@ export function App() {
   );
 }
 
-
 interface Notification {
   message: string;
   actionLabel?: string;
   onAction?: () => void;
 }
-

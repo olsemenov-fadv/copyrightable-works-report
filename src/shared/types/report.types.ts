@@ -23,6 +23,7 @@ export interface GenerateReportParams {
 export interface AddReportToHistoryParams {
   fullName: string;
   sinceDate: string;
+  untilDate?: string;
   repositoriesData: RepositoryCommitData[];
 }
 
@@ -42,6 +43,7 @@ export interface ReportHistoryEntry {
   authorName: string;
   reportingMonth: string;
   sinceDate: string;
+  untilDate?: string;
   repositoryCount: number;
   totalCommits: number;
   status: ReportStatus;

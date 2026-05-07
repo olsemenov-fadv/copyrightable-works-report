@@ -114,14 +114,24 @@ export class GithubService {
     repositoryFullNames: string[],
     authorLogin: string,
     sinceDate?: string,
+    untilDate?: string,
   ): Promise<RepositoryCommitData[]> {
     const sinceIso = sinceDate
       ? `${sinceDate.slice(0, 10)}T00:00:00Z`
       : this.getDefaultSinceIso();
+    const untilIso = untilDate
+      ? `${untilDate.slice(0, 10)}T23:59:59Z`
+      : undefined;
 
     return Promise.all(
       repositoryFullNames.map((fullName) =>
-        this.fetchRepoCommitData(pat, fullName, authorLogin, sinceIso),
+        this.fetchRepoCommitData(
+          pat,
+          fullName,
+          authorLogin,
+          sinceIso,
+          untilIso,
+        ),
       ),
     );
   }
@@ -131,6 +141,7 @@ export class GithubService {
     fullName: string,
     authorLogin: string,
     sinceIso: string,
+    untilIso?: string,
   ): Promise<RepositoryCommitData> {
     const shortName = fullName.split("/").pop() ?? fullName;
     const htmlUrl = `https://github.com/${fullName}`;
@@ -139,7 +150,8 @@ export class GithubService {
       const [repoOwner, repoName] = fullName.split("/");
       const baseUrl =
         `${GITHUB_API}/repos/${encodeURIComponent(repoOwner)}/${encodeURIComponent(repoName)}/commits` +
-        `?author=${encodeURIComponent(authorLogin)}&since=${sinceIso}`;
+        `?author=${encodeURIComponent(authorLogin)}&since=${sinceIso}` +
+        (untilIso ? `&until=${untilIso}` : "");
 
       const commits = await paginateGet<{
         sha: string;

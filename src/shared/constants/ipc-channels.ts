@@ -7,13 +7,7 @@ export const IpcChannels = {
   DIALOG_SELECT_DIRECTORY: "dialog:selectDirectory",
   SHELL_OPEN_EXTERNAL: "shell:openExternal",
 
-  // Git channels
-  GIT_SCAN_REPOSITORIES: "git:scanRepositories",
-  GIT_GET_REPORT: "git:getReport",
-  GIT_GET_USER_CONFIG: "git:getUserConfig",
-
-  // Report channels
-  REPORT_GENERATE_AND_SAVE: "report:generateAndSave",
+  // Report channels: "report:generateAndSave",
   REPORT_ADD_TO_HISTORY: "report:addToHistory",
   REPORT_GET_BY_ID: "report:getById",
   REPORT_CREATE_DOCUMENT: "report:createDocument",

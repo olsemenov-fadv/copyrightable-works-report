@@ -39,6 +39,7 @@ interface ReportRow {
   author_name: string;
   reporting_month: string;
   since_date: string;
+  until_date: string;
   repository_count: number;
   total_commits: number;
   status: string;
@@ -159,6 +160,15 @@ export class DatabaseService {
         url          TEXT NOT NULL DEFAULT ''
       );
     `);
+
+    // Add until_date column to reports if it doesn't exist (migration)
+    try {
+      this.db.exec(
+        "ALTER TABLE reports ADD COLUMN until_date TEXT NOT NULL DEFAULT ''",
+      );
+    } catch {
+      // Column already exists — no-op
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -439,10 +449,10 @@ export class DatabaseService {
     const insertReport = this.db.prepare(`
       INSERT OR REPLACE INTO reports
         (id, file_name, file_path, created_at, author_name, reporting_month,
-         since_date, repository_count, total_commits, status)
+         since_date, until_date, repository_count, total_commits, status)
       VALUES
         (@id, @file_name, @file_path, @created_at, @author_name, @reporting_month,
-         @since_date, @repository_count, @total_commits, @status)
+         @since_date, @until_date, @repository_count, @total_commits, @status)
     `);
 
     const insertRepo = this.db.prepare(`
@@ -472,6 +482,7 @@ export class DatabaseService {
         author_name: entry.authorName,
         reporting_month: entry.reportingMonth,
         since_date: entry.sinceDate,
+        until_date: entry.untilDate ?? "",
         repository_count: entry.repositoryCount,
         total_commits: entry.totalCommits,
         status: entry.status,
@@ -544,6 +555,7 @@ export class DatabaseService {
       authorName: row.author_name,
       reportingMonth: row.reporting_month,
       sinceDate: row.since_date,
+      untilDate: row.until_date || undefined,
       repositoryCount: row.repository_count,
       totalCommits: row.total_commits,
       status: row.status as ReportHistoryEntry["status"],

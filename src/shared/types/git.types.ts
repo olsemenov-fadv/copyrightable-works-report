@@ -1,21 +1,4 @@
 /**
- * Represents a Git repository found during scanning
- */
-export interface GitRepository {
-  name: string;
-  path: string;
-  selected: boolean;
-}
-
-/**
- * Git user configuration from global git config
- */
-export interface GitUserConfig {
-  name: string;
-  email: string;
-}
-
-/**
  * A single commit entry with structured data from git or GitHub API
  */
 export interface CommitEntry {
@@ -38,16 +21,6 @@ export interface RepositoryCommitData {
   repositoryLink: string;
   commits: CommitEntry[];
   commitCount: number;
-}
-
-/**
- * Request parameters for generating a report
- */
-export interface GetReportParams {
-  author: string;
-  authorEmail: string;
-  repositoriesPaths: string[];
-  sinceDate?: string;
 }
 
 /**
@@ -113,4 +86,5 @@ export interface GithubGetReportParams {
   authorLogin: string;
   repositoryFullNames: string[];
   sinceDate?: string;
+  untilDate?: string;
 }

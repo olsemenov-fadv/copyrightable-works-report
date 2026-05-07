@@ -120,6 +120,7 @@ export function registerGithubHandlers(): void {
         params.repositoryFullNames,
         params.authorLogin,
         params.sinceDate,
+        params.untilDate,
       );
     },
   );

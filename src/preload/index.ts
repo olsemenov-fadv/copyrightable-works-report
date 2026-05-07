@@ -6,10 +6,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IpcChannels } from "../shared/constants";
 import type {
-  GitRepository,
-  GetReportParams,
   RepositoryCommitData,
-  GitUserConfig,
   GithubUserInfo,
   GithubOrg,
   GithubRepo,
@@ -30,11 +27,6 @@ export interface ElectronAPI {
   // Dialog operations
   selectDirectory: () => Promise<string | null>;
   openExternal: (url: string) => Promise<void>;
-
-  // Git operations
-  scanForRepositories: (directoryPath: string) => Promise<GitRepository[]>;
-  getUserConfig: () => Promise<GitUserConfig>;
-  getReport: (params: GetReportParams) => Promise<RepositoryCommitData[]>;
 
   // Report operations
   generateAndSaveReport: (
@@ -92,16 +84,6 @@ const electronAPI: ElectronAPI = {
 
   openExternal: (url: string): Promise<void> =>
     ipcRenderer.invoke(IpcChannels.SHELL_OPEN_EXTERNAL, url),
-
-  // Git operations
-  scanForRepositories: (directoryPath: string): Promise<GitRepository[]> =>
-    ipcRenderer.invoke(IpcChannels.GIT_SCAN_REPOSITORIES, directoryPath),
-
-  getUserConfig: (): Promise<GitUserConfig> =>
-    ipcRenderer.invoke(IpcChannels.GIT_GET_USER_CONFIG),
-
-  getReport: (params: GetReportParams): Promise<RepositoryCommitData[]> =>
-    ipcRenderer.invoke(IpcChannels.GIT_GET_REPORT, params),
 
   // Report operations
   generateAndSaveReport: (

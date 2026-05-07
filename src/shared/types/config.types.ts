@@ -3,7 +3,6 @@
  */
 export interface AppConfig {
   approver: string;
-  sinceDate?: string;
 }
 
 /**

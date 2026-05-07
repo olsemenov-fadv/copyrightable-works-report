@@ -111,6 +111,7 @@ export class ReportService {
       authorName: params.fullName,
       reportingMonth: this.getReportingMonth(),
       sinceDate: params.sinceDate,
+      untilDate: params.untilDate,
       repositoryCount: params.repositoriesData.filter((r) => r.commitCount > 0)
         .length,
       totalCommits,

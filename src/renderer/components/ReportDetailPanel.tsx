@@ -178,7 +178,11 @@ export function ReportDetailPanel({
           <div className="report-detail-meta-row">
             <span className="report-detail-meta-label">Period</span>
             <span className="report-detail-meta-value">
-              From {report.sinceDate || "N/A"}
+              {report.sinceDate
+                ? report.untilDate
+                  ? `${report.sinceDate} – ${report.untilDate}`
+                  : `From ${report.sinceDate}`
+                : "Current month"}
             </span>
           </div>
         </div>

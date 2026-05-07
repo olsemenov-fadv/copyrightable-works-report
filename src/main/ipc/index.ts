@@ -1,6 +1,5 @@
 import {
   registerDialogHandlers,
-  registerGitHandlers,
   registerReportHandlers,
   registerConfigHandlers,
   registerGithubHandlers,
@@ -12,7 +11,6 @@ import {
  */
 export function registerAllIpcHandlers(): void {
   registerDialogHandlers();
-  registerGitHandlers();
   registerReportHandlers();
   registerConfigHandlers();
   registerGithubHandlers();

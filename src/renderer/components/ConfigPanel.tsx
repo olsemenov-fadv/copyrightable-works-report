@@ -1,12 +1,6 @@
 import { useState } from "react";
 import type { AppConfig, GithubUserInfo, GithubOrg } from "../../shared/types";
-import {
-  UserIcon,
-  CalendarIcon,
-  UserCheckIcon,
-  AlertCircleIcon,
-  CheckIcon,
-} from "./Icons";
+import { UserIcon, UserCheckIcon, AlertCircleIcon, CheckIcon } from "./Icons";
 
 interface ConfigPanelProps {
   config: AppConfig;
@@ -32,7 +26,6 @@ export function ConfigPanel({
   onRefreshOrgs,
 }: ConfigPanelProps) {
   const [approver, setApprover] = useState(config.approver || "");
-  const [sinceDate, setSinceDate] = useState(config.sinceDate || "");
   const [pat, setPat] = useState("");
   const [isSavingConfig, setIsSavingConfig] = useState(false);
 
@@ -40,7 +33,7 @@ export function ConfigPanel({
     e.preventDefault();
     setIsSavingConfig(true);
     try {
-      await onSaveConfig({ approver, sinceDate: sinceDate || undefined });
+      await onSaveConfig({ approver });
     } finally {
       setIsSavingConfig(false);
     }
@@ -79,26 +72,6 @@ export function ConfigPanel({
                     value={approver}
                     onChange={(e) => setApprover(e.target.value)}
                   />
-                </div>
-              </div>
-              <div className="config-item config-divider">
-                <div className="config-icon">
-                  <CalendarIcon />
-                </div>
-                <div className="config-details">
-                  <span className="config-label">Default "Since" Date</span>
-                  <input
-                    type="date"
-                    className="config-input"
-                    value={sinceDate}
-                    onChange={(e) => setSinceDate(e.target.value)}
-                  />
-                  <span
-                    className="config-value config-empty"
-                    style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}
-                  >
-                    Leave blank to use the first day of the current month
-                  </span>
                 </div>
               </div>
             </div>

@@ -1,8 +1,5 @@
 import type {
-  GitRepository,
-  GetReportParams,
   RepositoryCommitData,
-  GitUserConfig,
   GithubUserInfo,
   GithubOrg,
   GithubRepo,
@@ -21,11 +18,6 @@ export interface ElectronAPI {
 
   // Dialog operations
   selectDirectory: () => Promise<string | null>;
-
-  // Git operations
-  scanForRepositories: (directoryPath: string) => Promise<GitRepository[]>;
-  getUserConfig: () => Promise<GitUserConfig>;
-  getReport: (params: GetReportParams) => Promise<RepositoryCommitData[]>;
 
   // Report operations
   generateAndSaveReport: (
