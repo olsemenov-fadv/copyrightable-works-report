@@ -9,6 +9,8 @@ import { FuseV1Options, FuseVersion } from "@electron/fuses";
 const config: ForgeConfig = {
   packagerConfig: {
     asar: true,
+    // Unpack native addons from the asar so Node can load them at runtime
+    asarUnpack: ["node_modules/better-sqlite3/**"],
     extraResource: "./assets/template.docx",
   },
   rebuildConfig: {},

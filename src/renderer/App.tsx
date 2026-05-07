@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import type {
-  GitRepository,
-  GitUserConfig,
+  GithubUserInfo,
+  GithubOrg,
+  GithubRepository,
   ReportHistoryEntry,
-  ExportFormat,
+  AppConfig,
 } from "../shared/types";
 import { Sidebar, type View } from "./components/Sidebar";
 import { RepositoriesPanel } from "./components/RepositoriesPanel";
@@ -11,402 +12,365 @@ import { ReportDetailPanel } from "./components/ReportDetailPanel";
 import { ConfigPanel } from "./components/ConfigPanel";
 import { HistoryPanel } from "./components/HistoryPanel";
 import { NotificationBar } from "./components/NotificationBar";
-import { ImportModal } from "./components/ImportModal";
+
+interface Notification {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
 
 export function App() {
   const [activeView, setActiveView] = useState<View>("repositories");
-  const [selectedDirectory, setSelectedDirectory] = useState("");
-  const [repositories, setRepositories] = useState<GitRepository[]>([]);
-  const [gitUserConfig, setGitUserConfig] = useState<GitUserConfig | null>(
+
+  // GitHub state
+  const [connectedGithubUser, setConnectedGithubUser] =
+    useState<GithubUserInfo | null>(null);
+  const [savedOrgs, setSavedOrgs] = useState<GithubOrg[]>([]);
+  // Persisted active repos (saved in DB)
+  const [activeRepos, setActiveRepos] = useState<GithubRepository[]>([]);
+  // Available repos fetched live from GitHub (for the picker)
+  const [availableRepos, setAvailableRepos] = useState<GithubRepository[]>([]);
+  const [isLoadingAvailable, setIsLoadingAvailable] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [isRefreshingOrgs, setIsRefreshingOrgs] = useState(false);
+
+  // Config state
+  const [config, setConfig] = useState<AppConfig>({ approver: "" });
+
+  // Report state
+  const [currentReport, setCurrentReport] = useState<ReportHistoryEntry | null>(
     null,
   );
-  const [isScanning, setIsScanning] = useState(false);
-  const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const [scanError, setScanError] = useState<string | null>(null);
-  const [hasScanned, setHasScanned] = useState(false);
-  const [historyCount, setHistoryCount] = useState(0);
-  const [reportGeneratedTrigger, setReportGeneratedTrigger] = useState(0);
-  const [approver, setApprover] = useState("");
-  const [showApproverNotification, setShowApproverNotification] =
-    useState(true);
-  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [foundRepoCount, setFoundRepoCount] = useState(0);
-  const [selectedReportDetail, setSelectedReportDetail] =
-    useState<ReportHistoryEntry | null>(null);
-  const [isExportingReport, setIsExportingReport] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isDeletingReport, setIsDeletingReport] = useState(false);
-  const [sinceDate, setSinceDate] = useState(() => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    return `${year}-${month}-01`;
-  });
+  const [historyRefreshTrigger, setHistoryRefreshTrigger] = useState(0);
 
-  const selectedRepositories = repositories.filter((repo) => repo.selected);
+  // Notification state
+  const [notification, setNotification] = useState<Notification | null>(null);
 
-  // Load config on startup
-  useEffect(() => {
-    const loadConfig = async () => {
-      try {
-        const config = await window.electronAPI.getConfig();
-        setApprover(config.approver || "");
-        if (config.approver) {
-          setShowApproverNotification(false);
-        }
-        // Load saved repositories
-        if (config.repositories && config.repositories.length > 0) {
-          const loadedRepos: GitRepository[] = config.repositories.map((r) => ({
-            name: r.name,
-            path: r.path,
-            selected: false,
-          }));
-          setRepositories(loadedRepos);
-          setHasScanned(true);
-        }
-      } catch (error) {
-        console.error("Failed to load config:", error);
-      }
-    };
-    loadConfig();
-  }, []);
-
-  useEffect(() => {
-    const loadGitConfig = async () => {
-      try {
-        const config = await window.electronAPI.getUserConfig();
-        setGitUserConfig(config);
-      } catch (error) {
-        console.error("Failed to load git user config:", error);
-      }
-    };
-    loadGitConfig();
-  }, []);
-
-  // Load history count on mount
-  useEffect(() => {
-    const loadHistoryCount = async () => {
-      try {
-        const history = await window.electronAPI.getReportHistory();
-        setHistoryCount(history.entries.length);
-      } catch (error) {
-        console.error("Failed to load history count:", error);
-      }
-    };
-    loadHistoryCount();
-  }, [reportGeneratedTrigger]);
-
-  const handleApproverChange = useCallback(async (newApprover: string) => {
-    setApprover(newApprover);
-    if (newApprover) {
-      setShowApproverNotification(false);
-    }
-    try {
-      const config = await window.electronAPI.getConfig();
-      await window.electronAPI.saveConfig({ ...config, approver: newApprover });
-    } catch (error) {
-      console.error("Failed to save config:", error);
-    }
-  }, []);
-
-  const saveRepositoriesToConfig = useCallback(
-    async (repos: GitRepository[]) => {
-      try {
-        const config = await window.electronAPI.getConfig();
-        await window.electronAPI.saveConfig({
-          ...config,
-          repositories: repos.map((r) => ({ name: r.name, path: r.path })),
-        });
-      } catch (error) {
-        console.error("Failed to save repositories:", error);
-      }
-    },
-    [],
-  );
-
-  const handleBrowse = useCallback(async () => {
-    try {
-      const selected = await window.electronAPI.selectDirectory();
-      if (selected) {
-        setSelectedDirectory(selected);
-        setScanError(null);
-        setFoundRepoCount(0);
-
-        // Auto-scan when directory is selected
-        setIsScanning(true);
-        try {
-          const repos = await window.electronAPI.scanForRepositories(selected);
-          setFoundRepoCount(repos.length);
-        } catch (error) {
-          console.error("Error scanning repositories:", error);
-          setScanError(
-            error instanceof Error ? error.message : "Unknown error occurred",
-          );
-        } finally {
-          setIsScanning(false);
-        }
-      }
-    } catch (error) {
-      console.error("Error selecting directory:", error);
-    }
-  }, []);
-
-  const handleImport = useCallback(
-    async (directory: string) => {
-      if (!directory) return;
-
-      setIsScanning(true);
-      setScanError(null);
-
-      try {
-        const newRepos =
-          await window.electronAPI.scanForRepositories(directory);
-
-        // Merge with existing repositories (avoid duplicates by path)
-        setRepositories((prev) => {
-          const existingPaths = new Set(prev.map((r) => r.path));
-          const uniqueNewRepos = newRepos.filter(
-            (r) => !existingPaths.has(r.path),
-          );
-          const merged = [...prev, ...uniqueNewRepos];
-
-          // Save to config
-          saveRepositoriesToConfig(merged);
-
-          return merged;
-        });
-
-        setHasScanned(true);
-        setIsImportModalOpen(false);
-        setSelectedDirectory("");
-        setFoundRepoCount(0);
-      } catch (error) {
-        console.error("Error importing repositories:", error);
-        setScanError(
-          error instanceof Error ? error.message : "Unknown error occurred",
-        );
-      } finally {
-        setIsScanning(false);
-      }
-    },
-    [saveRepositoriesToConfig],
-  );
-
-  const handleRemoveRepository = useCallback(
-    (index: number) => {
-      setRepositories((prev) => {
-        const updated = prev.filter((_, i) => i !== index);
-        saveRepositoriesToConfig(updated);
-        return updated;
-      });
-    },
-    [saveRepositoriesToConfig],
-  );
-
-  const handleOpenImportModal = useCallback(() => {
-    setSelectedDirectory("");
-    setScanError(null);
-    setFoundRepoCount(0);
-    setIsImportModalOpen(true);
-  }, []);
-
-  const handleCloseImportModal = useCallback(() => {
-    setIsImportModalOpen(false);
-    setSelectedDirectory("");
-    setScanError(null);
-    setFoundRepoCount(0);
-  }, []);
-
-  const formatDateForGit = (dateString: string): string => {
-    const [year, month, day] = dateString.split("-");
-    return `${day}.${month}.${year}`;
+  const showNotification = (
+    message: string,
+    actionLabel?: string,
+    onAction?: () => void,
+  ) => {
+    setNotification({ message, actionLabel, onAction });
   };
 
-  const handleGenerateReport = useCallback(async () => {
-    if (selectedRepositories.length === 0 || !gitUserConfig) return;
+  // ─── Load available repos from GitHub (for picker) ─────────────────────────
 
-    setIsGeneratingReport(true);
-
-    try {
-      const data = await window.electronAPI.getReport({
-        author: gitUserConfig.name,
-        authorEmail: gitUserConfig.email,
-        repositoriesPaths: selectedRepositories.map((repo) => repo.path),
-        sinceDate: formatDateForGit(sinceDate),
-      });
-
-      // Add to history immediately
-      const historyEntry = await window.electronAPI.addReportToHistory({
-        fullName: gitUserConfig.name,
-        sinceDate: sinceDate,
-        repositoriesData: data,
-      });
-
-      // Trigger history reload
-      setReportGeneratedTrigger((prev) => prev + 1);
-
-      // Navigate to the report detail view
-      setSelectedReportDetail(historyEntry);
-      setActiveView("reports");
-    } catch (error) {
-      console.error("Error generating report:", error);
-    } finally {
-      setIsGeneratingReport(false);
+  const loadAvailableRepos = useCallback(async (orgs: GithubOrg[]) => {
+    const selectedOrgs = orgs.filter((o) => o.selected);
+    if (selectedOrgs.length === 0) {
+      setAvailableRepos([]);
+      return;
     }
-  }, [selectedRepositories, gitUserConfig, sinceDate]);
-
-  const handleSelectReportDetail = useCallback((report: ReportHistoryEntry) => {
-    setSelectedReportDetail(report);
+    setIsLoadingAvailable(true);
+    try {
+      const ghRepos = await window.electronAPI.getGithubOrgRepos();
+      setAvailableRepos(
+        ghRepos.map((r) => ({
+          name: r.name,
+          fullName: r.full_name,
+          htmlUrl: r.html_url,
+          org: r.full_name.split("/")[0],
+          private: r.private,
+          selected: false,
+        })),
+      );
+    } catch (err) {
+      console.error("Failed to load available repos:", err);
+    } finally {
+      setIsLoadingAvailable(false);
+    }
   }, []);
 
-  const handleBackFromDetail = useCallback(() => {
-    setSelectedReportDetail(null);
+  // ─── Initialization ────────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const init = async () => {
+      try {
+        const [user, orgs, cfg, active] = await Promise.all([
+          window.electronAPI.getConnectedGithubUser(),
+          window.electronAPI.getSavedGithubOrgs(),
+          window.electronAPI.getConfig(),
+          window.electronAPI.getActiveRepos(),
+        ]);
+        setConnectedGithubUser(user);
+        setSavedOrgs(orgs);
+        setConfig(cfg);
+        setActiveRepos(active);
+        if (user && orgs.some((o) => o.selected)) {
+          loadAvailableRepos(orgs);
+        }
+      } catch (err) {
+        console.error("Initialization error:", err);
+      }
+    };
+    init();
+  }, [loadAvailableRepos]);
+
+  // ─── GitHub / Org handlers ─────────────────────────────────────────────────
+
+  const handleSavePat = useCallback(
+    async (pat: string) => {
+      setIsConnecting(true);
+      try {
+        const { user, orgs } = await window.electronAPI.saveGithubPat(pat);
+        setConnectedGithubUser(user);
+        setSavedOrgs(orgs);
+        showNotification(`Connected as ${user.login}`);
+        loadAvailableRepos(orgs);
+      } catch (err) {
+        console.error("Failed to save PAT:", err);
+        showNotification(
+          err instanceof Error ? err.message : "Failed to connect to GitHub.",
+        );
+      } finally {
+        setIsConnecting(false);
+      }
+    },
+    [loadAvailableRepos],
+  );
+
+  const handleToggleOrg = useCallback(
+    async (login: string, selected: boolean) => {
+      const updatedOrgs = savedOrgs.map((o) =>
+        o.login === login ? { ...o, selected } : o,
+      );
+      setSavedOrgs(updatedOrgs);
+      try {
+        await window.electronAPI.saveGithubOrgSelection(login, selected);
+        loadAvailableRepos(updatedOrgs);
+      } catch (err) {
+        console.error("Failed to save org selection:", err);
+        setSavedOrgs(savedOrgs);
+      }
+    },
+    [savedOrgs, loadAvailableRepos],
+  );
+
+  const handleRefreshOrgs = useCallback(async () => {
+    setIsRefreshingOrgs(true);
+    try {
+      const orgs = await window.electronAPI.refreshGithubOrgs();
+      setSavedOrgs(orgs);
+      loadAvailableRepos(orgs);
+      showNotification("Organizations refreshed.");
+    } catch (err) {
+      console.error("Failed to refresh orgs:", err);
+      showNotification("Failed to refresh organizations.");
+    } finally {
+      setIsRefreshingOrgs(false);
+    }
+  }, [loadAvailableRepos]);
+
+  // ─── Active repo handlers ──────────────────────────────────────────────────
+
+  const handleAddActiveRepo = useCallback(async (repo: GithubRepository) => {
+    try {
+      await window.electronAPI.addActiveRepo(repo);
+      setActiveRepos((prev) => {
+        if (prev.some((r) => r.fullName === repo.fullName)) return prev;
+        return [...prev, { ...repo, selected: true }];
+      });
+    } catch (err) {
+      console.error("Failed to add active repo:", err);
+      showNotification("Failed to add repository.");
+    }
+  }, []);
+
+  const handleRemoveActiveRepo = useCallback(async (fullName: string) => {
+    try {
+      await window.electronAPI.removeActiveRepo(fullName);
+      setActiveRepos((prev) => prev.filter((r) => r.fullName !== fullName));
+    } catch (err) {
+      console.error("Failed to remove active repo:", err);
+      showNotification("Failed to remove repository.");
+    }
+  }, []);
+
+  // ─── Config handler ────────────────────────────────────────────────────────
+
+  const handleSaveConfig = useCallback(async (updates: Partial<AppConfig>) => {
+    try {
+      const updated = await window.electronAPI.saveConfig(updates);
+      setConfig(updated);
+      showNotification("Settings saved.");
+    } catch (err) {
+      console.error("Failed to save config:", err);
+      showNotification("Failed to save settings.");
+    }
+  }, []);
+
+  // ─── Report generation (from all active repos) ─────────────────────────────
+
+  const handleGenerateReport = useCallback(async () => {
+    if (!connectedGithubUser) {
+      showNotification(
+        "Connect your GitHub account in Settings first.",
+        "Go to Settings",
+        () => setActiveView("config"),
+      );
+      return;
+    }
+    if (activeRepos.length === 0) {
+      showNotification("Add at least one repository to generate a report.");
+      return;
+    }
+
+    setIsGenerating(true);
+    try {
+      const repositoriesData = await window.electronAPI.getGithubReport({
+        authorLogin: connectedGithubUser.login,
+        repositoryFullNames: activeRepos.map((r) => r.fullName),
+        sinceDate: config.sinceDate,
+      });
+
+      const historyEntry = await window.electronAPI.addReportToHistory({
+        fullName: connectedGithubUser.name || connectedGithubUser.login,
+        sinceDate:
+          config.sinceDate ||
+          new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+            .toISOString()
+            .slice(0, 10),
+        repositoriesData,
+      });
+
+      setCurrentReport(historyEntry);
+      setHistoryRefreshTrigger((n) => n + 1);
+      setActiveView("reports");
+    } catch (err) {
+      console.error("Failed to generate report:", err);
+      showNotification(
+        err instanceof Error ? err.message : "Failed to generate report.",
+      );
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [connectedGithubUser, activeRepos, config.sinceDate]);
+
+  // ─── Report detail handlers ─────────────────────────────────────────────
+
+  const handleSelectReport = useCallback((report: ReportHistoryEntry) => {
+    setCurrentReport(report);
   }, []);
 
   const handleExportReport = useCallback(
-    async (id: string, format: ExportFormat) => {
-      setIsExportingReport(true);
+    async (id: string) => {
+      setIsExporting(true);
       try {
-        await window.electronAPI.exportReport({
+        const ok = await window.electronAPI.exportReport({
           id,
-          format,
-          approver,
+          approver: config.approver,
         });
-      } catch (error) {
-        console.error("Error exporting report:", error);
-        alert(
-          error instanceof Error ? error.message : "Failed to export report",
-        );
+        if (!ok) showNotification("Export failed.");
+      } catch (err) {
+        console.error("Export error:", err);
+        showNotification(err instanceof Error ? err.message : "Export failed.");
       } finally {
-        setIsExportingReport(false);
+        setIsExporting(false);
       }
     },
-    [approver],
+    [config.approver],
   );
 
-  const handleDeleteReportDetail = useCallback(async (id: string) => {
-    setIsDeletingReport(true);
-    try {
-      await window.electronAPI.deleteReport(id);
-      setSelectedReportDetail(null);
-      setReportGeneratedTrigger((prev) => prev + 1);
-    } catch (error) {
-      console.error("Error deleting report:", error);
-    } finally {
-      setIsDeletingReport(false);
-    }
-  }, []);
-
-  const handleViewChange = useCallback((view: View) => {
-    // Reset selected report detail when navigating away from reports
-    if (view !== "reports") {
-      setSelectedReportDetail(null);
-    }
-    setActiveView(view);
-  }, []);
-
-  const handleToggleSelection = useCallback((index: number) => {
-    setRepositories((prev) => {
-      const updated = [...prev];
-      updated[index] = {
-        ...updated[index],
-        selected: !updated[index].selected,
-      };
-      return updated;
-    });
-  }, []);
-
-  const handleSelectAll = useCallback(() => {
-    setRepositories((prev) =>
-      prev.map((repo) => ({ ...repo, selected: true })),
-    );
-  }, []);
-
-  const handleDeselectAll = useCallback(() => {
-    setRepositories((prev) =>
-      prev.map((repo) => ({ ...repo, selected: false })),
-    );
-  }, []);
-
-  const renderActiveView = () => {
-    switch (activeView) {
-      case "repositories":
-        return (
-          <RepositoriesPanel
-            repositories={repositories}
-            isLoading={isScanning}
-            error={scanError}
-            hasScanned={hasScanned}
-            onToggleSelection={handleToggleSelection}
-            onSelectAll={handleSelectAll}
-            onDeselectAll={handleDeselectAll}
-            onGenerateReport={handleGenerateReport}
-            isGeneratingReport={isGeneratingReport}
-            onImport={handleOpenImportModal}
-            onRemoveRepository={handleRemoveRepository}
-          />
-        );
-      case "reports":
-        if (selectedReportDetail) {
-          return (
-            <ReportDetailPanel
-              report={selectedReportDetail}
-              approver={approver}
-              onBack={handleBackFromDetail}
-              onDelete={handleDeleteReportDetail}
-              onExport={handleExportReport}
-              isExporting={isExportingReport}
-              isDeleting={isDeletingReport}
-            />
-          );
+  const handleDeleteReport = useCallback(
+    async (id: string) => {
+      setIsDeletingReport(true);
+      try {
+        await window.electronAPI.deleteReport(id);
+        setHistoryRefreshTrigger((n) => n + 1);
+        if (currentReport?.id === id) {
+          setCurrentReport(null);
         }
-        return (
-          <HistoryPanel
-            refreshTrigger={reportGeneratedTrigger}
-            onSelectReport={handleSelectReportDetail}
-          />
-        );
-      case "config":
-        return (
-          <ConfigPanel
-            gitConfig={gitUserConfig}
-            sinceDate={sinceDate}
-            approver={approver}
-            onSinceDateChange={setSinceDate}
-            onApproverChange={handleApproverChange}
-          />
-        );
-    }
-  };
+      } catch (err) {
+        console.error("Delete error:", err);
+        showNotification("Failed to delete report.");
+      } finally {
+        setIsDeletingReport(false);
+      }
+    },
+    [currentReport],
+  );
+
+  // ─── Render ────────────────────────────────────────────────────────────────
+
+  const hasOrgsConfigured = savedOrgs.some((o) => o.selected);
 
   return (
     <div className="app-layout">
       <Sidebar
         activeView={activeView}
-        onViewChange={handleViewChange}
-        repoCount={repositories.length}
-        reportsCount={historyCount}
+        onViewChange={setActiveView}
+        repoCount={activeRepos.length}
       />
-      <main className="main-area">
-        {!approver && showApproverNotification && (
+
+      <div className="main-area">
+        {notification && (
           <NotificationBar
-            message="Approver name is not configured. Reports require an approver name."
-            actionLabel="Go to Settings"
-            onAction={() => setActiveView("config")}
-            onDismiss={() => setShowApproverNotification(false)}
+            message={notification.message}
+            actionLabel={notification.actionLabel}
+            onAction={notification.onAction}
+            onDismiss={() => setNotification(null)}
           />
         )}
-        {renderActiveView()}
-      </main>
-      <ImportModal
-        isOpen={isImportModalOpen}
-        onClose={handleCloseImportModal}
-        onImport={handleImport}
-        isScanning={isScanning}
-        selectedDirectory={selectedDirectory}
-        onBrowse={handleBrowse}
-        scanError={scanError}
-        foundCount={foundRepoCount}
-      />
+
+        {activeView === "repositories" && (
+          <RepositoriesPanel
+            activeRepos={activeRepos}
+            availableRepos={availableRepos}
+            isLoadingAvailable={isLoadingAvailable}
+            hasOrgsConfigured={hasOrgsConfigured}
+            isGenerating={isGenerating}
+            canGenerate={activeRepos.length > 0 && !!connectedGithubUser}
+            onAddRepo={handleAddActiveRepo}
+            onRemoveRepo={handleRemoveActiveRepo}
+            onGenerateReport={handleGenerateReport}
+          />
+        )}
+
+        {activeView === "reports" && !currentReport && (
+          <HistoryPanel
+            refreshTrigger={historyRefreshTrigger}
+            onSelectReport={handleSelectReport}
+          />
+        )}
+
+        {activeView === "reports" && currentReport && (
+          <ReportDetailPanel
+            report={currentReport}
+            approver={config.approver}
+            onBack={() => setCurrentReport(null)}
+            onDelete={handleDeleteReport}
+            onExport={handleExportReport}
+            isExporting={isExporting}
+            isDeleting={isDeletingReport}
+          />
+        )}
+
+        {activeView === "config" && (
+          <ConfigPanel
+            config={config}
+            connectedGithubUser={connectedGithubUser}
+            savedOrgs={savedOrgs}
+            isConnecting={isConnecting}
+            isRefreshingOrgs={isRefreshingOrgs}
+            onSaveConfig={handleSaveConfig}
+            onSavePat={handleSavePat}
+            onToggleOrg={handleToggleOrg}
+            onRefreshOrgs={handleRefreshOrgs}
+          />
+        )}
+      </div>
     </div>
   );
 }
+
+
+interface Notification {
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}
+

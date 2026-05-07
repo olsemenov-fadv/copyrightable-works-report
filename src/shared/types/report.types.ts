@@ -1,16 +1,10 @@
 import type { RepositoryCommitData } from "./git.types";
 
 /**
- * Export format options
- */
-export type ExportFormat = "docx" | "pdf";
-
-/**
  * Parameters for exporting a report
  */
 export interface ExportReportParams {
   id: string;
-  format: ExportFormat;
   approver?: string;
 }
 

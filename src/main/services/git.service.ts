@@ -4,6 +4,7 @@ import type {
   RepositoryCommitData,
   GetReportParams,
   GitUserConfig,
+  CommitEntry,
 } from "../../shared/types";
 
 /**
@@ -69,14 +70,13 @@ export class GitService {
       repositoryPath,
       sinceDate,
     );
-    const commitCount = this.countCommits(commits);
 
     return {
       repositoryPath,
       repositoryName: path.basename(repositoryPath),
       repositoryLink,
       commits,
-      commitCount,
+      commitCount: commits.length,
     };
   }
 
@@ -119,7 +119,7 @@ export class GitService {
     authorEmail: string,
     repositoryPath: string,
     sinceDate?: string,
-  ): Promise<string> {
+  ): Promise<CommitEntry[]> {
     try {
       const effectiveSinceDate = sinceDate || this.getDefaultSinceDate();
       const defaultBranch = await this.getDefaultBranch(repositoryPath);
@@ -134,35 +134,30 @@ export class GitService {
 
       if (logResult.all.length > 0) {
         console.log(`Found commits in ${repositoryPath}`);
-        return this.formatLogOutput(logResult.all);
+        return this.buildCommitEntries(logResult.all);
       }
 
-      return "";
+      return [];
     } catch (error) {
       console.warn(`Could not get commits for ${repositoryPath}:`, error);
-      return "";
+      return [];
     }
   }
 
   /**
-   * Formats structured log entries into a git-log-style string
+   * Converts structured log entries into CommitEntry[]
    */
-  private formatLogOutput(commits: readonly DefaultLogFields[]): string {
-    return commits
-      .map((commit) => {
-        const lines = [
-          `commit ${commit.hash}`,
-          `Author: ${commit.author_name} <${commit.author_email}>`,
-          `Date:   ${commit.date}`,
-          "",
-          `    ${commit.message}`,
-        ];
-        if (commit.body) {
-          lines.push("", commit.body);
-        }
-        return lines.join("\n");
-      })
-      .join("\n\n");
+  private buildCommitEntries(
+    commits: readonly DefaultLogFields[],
+  ): CommitEntry[] {
+    return commits.map((c) => ({
+      sha: c.hash,
+      authorName: c.author_name,
+      authorEmail: c.author_email,
+      date: c.date,
+      message: c.message,
+      body: c.body || undefined,
+    }));
   }
 
   /**
@@ -206,18 +201,6 @@ export class GitService {
     const month = String(now.getMonth() + 1).padStart(2, "0");
     const year = now.getFullYear();
     return `01.${month}.${year}`;
-  }
-
-  /**
-   * Counts the number of commits in a formatted log string
-   */
-  private countCommits(commitsLog: string): number {
-    if (!commitsLog.trim()) {
-      return 0;
-    }
-
-    const commitMatches = commitsLog.match(/^commit [a-f0-9]{40}$/gm);
-    return commitMatches ? commitMatches.length : 0;
   }
 }
 

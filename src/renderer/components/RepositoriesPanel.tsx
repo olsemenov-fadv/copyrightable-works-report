@@ -1,47 +1,79 @@
-import type { GitRepository } from "../../shared/types";
+import { useState, useMemo } from "react";
+import type { GithubRepository } from "../../shared/types";
 import {
-  FolderIcon,
-  SearchIcon,
-  XCircleIcon,
+  SettingsIcon,
+  AlertCircleIcon,
   CheckIcon,
-  TrashIcon,
+  SearchIcon,
   PlusIcon,
+  TrashIcon,
+  GitBranchIcon,
+  XCircleIcon,
 } from "./Icons";
 
 interface RepositoriesPanelProps {
-  repositories: GitRepository[];
-  isLoading: boolean;
-  error: string | null;
-  hasScanned: boolean;
-  onToggleSelection: (index: number) => void;
-  onSelectAll: () => void;
-  onDeselectAll: () => void;
+  activeRepos: GithubRepository[];
+  availableRepos: GithubRepository[];
+  isLoadingAvailable: boolean;
+  hasOrgsConfigured: boolean;
+  isGenerating: boolean;
+  canGenerate: boolean;
+  onAddRepo: (repo: GithubRepository) => void;
+  onRemoveRepo: (fullName: string) => void;
   onGenerateReport: () => void;
-  isGeneratingReport: boolean;
-  onImport: () => void;
-  onRemoveRepository: (index: number) => void;
 }
 
 export function RepositoriesPanel({
-  repositories,
-  isLoading,
-  error,
-  hasScanned,
-  onToggleSelection,
-  onSelectAll,
-  onDeselectAll,
+  activeRepos,
+  availableRepos,
+  isLoadingAvailable,
+  hasOrgsConfigured,
+  isGenerating,
+  canGenerate,
+  onAddRepo,
+  onRemoveRepo,
   onGenerateReport,
-  isGeneratingReport,
-  onImport,
-  onRemoveRepository,
 }: RepositoriesPanelProps) {
-  const selectedCount = repositories.filter((r) => r.selected).length;
-  const canGenerate = selectedCount > 0 && !isGeneratingReport;
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [search, setSearch] = useState("");
 
-  const handleRemove = (e: React.MouseEvent, index: number) => {
-    e.stopPropagation();
-    onRemoveRepository(index);
-  };
+  const activeSet = useMemo(
+    () => new Set(activeRepos.map((r) => r.fullName)),
+    [activeRepos],
+  );
+
+  const filteredAvailable = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return availableRepos.filter((r) => {
+      if (activeSet.has(r.fullName)) return false;
+      if (!q) return true;
+      return (
+        r.name.toLowerCase().includes(q) ||
+        r.fullName.toLowerCase().includes(q)
+      );
+    });
+  }, [availableRepos, activeSet, search]);
+
+  if (!hasOrgsConfigured) {
+    return (
+      <div className="panel">
+        <div className="panel-header">
+          <h2 className="panel-title">Repositories</h2>
+          <p className="panel-description">Manage repositories for reports</p>
+        </div>
+        <div className="panel-content">
+          <div className="panel-empty">
+            <SettingsIcon />
+            <h3>No Organizations Configured</h3>
+            <p>
+              Go to <strong>Settings</strong>, connect your GitHub account, then
+              select the organizations to load repositories from.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="panel">
@@ -49,80 +81,117 @@ export function RepositoriesPanel({
         <div className="panel-header-main">
           <h2 className="panel-title">Repositories</h2>
           <p className="panel-description">
-            Select the repositories to include in your report
+            {activeRepos.length === 0
+              ? "Add repositories to include in your reports"
+              : `${activeRepos.length} active ${activeRepos.length === 1 ? "repository" : "repositories"}`}
           </p>
         </div>
         <div className="panel-header-actions">
-          <button className="btn btn-outline btn-sm" onClick={onImport}>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setPickerOpen((v) => !v);
+              setSearch("");
+            }}
+          >
             <PlusIcon />
-            Import
+            Add Repositories
           </button>
-          {repositories.length > 0 && (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={onSelectAll}>
-                Select All
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={onDeselectAll}>
-                Clear
-              </button>
-            </>
-          )}
         </div>
       </div>
 
+      {/* ── Picker ──────────────────────────────────────────────────────────── */}
+      {pickerOpen && (
+        <div className="repo-picker">
+          <div className="repo-picker-header">
+            <div className="repo-search">
+              <SearchIcon />
+              <input
+                type="text"
+                className="repo-search-input"
+                placeholder="Search available repositories…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <button
+              className="btn btn-ghost btn-sm btn-icon"
+              onClick={() => setPickerOpen(false)}
+              title="Close"
+            >
+              <XCircleIcon />
+            </button>
+          </div>
+
+          <div className="repo-picker-list">
+            {isLoadingAvailable ? (
+              <div className="repo-picker-empty">
+                <div className="spinner" />
+                Loading…
+              </div>
+            ) : filteredAvailable.length === 0 ? (
+              <div className="repo-picker-empty">
+                {search
+                  ? `No results for "${search}"`
+                  : availableRepos.length === 0
+                    ? "No repositories found in selected organizations"
+                    : "All available repositories are already active"}
+              </div>
+            ) : (
+              filteredAvailable.map((repo) => (
+                <button
+                  key={repo.fullName}
+                  className="repo-picker-item"
+                  onClick={() => {
+                    onAddRepo(repo);
+                  }}
+                >
+                  <div className="repo-picker-item-icon">
+                    <GitBranchIcon />
+                  </div>
+                  <div className="repo-picker-item-info">
+                    <span className="repo-picker-item-name">{repo.name}</span>
+                    <span className="repo-picker-item-org">{repo.org}</span>
+                  </div>
+                  <div className="repo-picker-item-add">
+                    <PlusIcon />
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Active repos list ─────────────────────────────────────────────── */}
       <div className="panel-content panel-content-scroll">
-        {isLoading ? (
+        {activeRepos.length === 0 ? (
           <div className="panel-empty">
-            <div className="spinner-lg" />
-            <h3>Scanning repositories...</h3>
-            <p>This may take a moment depending on the directory size</p>
-          </div>
-        ) : error ? (
-          <div className="panel-empty panel-error">
-            <XCircleIcon />
-            <h3>Error scanning directory</h3>
-            <p>{error}</p>
-          </div>
-        ) : !hasScanned ? (
-          <div className="panel-empty">
-            <FolderIcon />
-            <h3>No repositories yet</h3>
+            <AlertCircleIcon />
+            <h3>No Active Repositories</h3>
             <p>
-              Click the "Import" button to scan a directory and find
-              repositories
-            </p>
-          </div>
-        ) : repositories.length === 0 ? (
-          <div className="panel-empty">
-            <SearchIcon />
-            <h3>No repositories found</h3>
-            <p>
-              Try selecting a different directory or scanning a parent folder
+              Click <strong>Add Repositories</strong> to select repositories for
+              your reports.
             </p>
           </div>
         ) : (
-          <div className="repo-grid">
-            {repositories.map((repo, index) => (
-              <div
-                key={repo.path}
-                className={`repo-card ${repo.selected ? "selected" : ""}`}
-              >
+          <div className="active-repo-list">
+            {activeRepos.map((repo) => (
+              <div key={repo.fullName} className="active-repo-item">
+                <div className="active-repo-item-icon">
+                  <CheckIcon />
+                </div>
+                <div className="active-repo-item-info">
+                  <span className="active-repo-item-name">{repo.name}</span>
+                  <span className="active-repo-item-org">
+                    {repo.org} &middot; {repo.private ? "Private" : "Public"}
+                  </span>
+                </div>
                 <button
-                  className="repo-card-main"
-                  onClick={() => onToggleSelection(index)}
-                >
-                  <div className="repo-card-check">
-                    {repo.selected && <CheckIcon />}
-                  </div>
-                  <div className="repo-card-content">
-                    <span className="repo-card-name">{repo.name}</span>
-                    <span className="repo-card-path">{repo.path}</span>
-                  </div>
-                </button>
-                <button
-                  className="repo-card-remove"
-                  onClick={(e) => handleRemove(e, index)}
-                  title="Remove repository"
+                  className="btn btn-ghost btn-sm btn-icon btn-danger"
+                  onClick={() => onRemoveRepo(repo.fullName)}
+                  title="Remove"
                 >
                   <TrashIcon />
                 </button>
@@ -132,27 +201,35 @@ export function RepositoriesPanel({
         )}
       </div>
 
-      {repositories.length > 0 && (
-        <div className="panel-footer">
-          <span className="panel-footer-info">
-            {selectedCount} of {repositories.length} selected
-          </span>
-          <button
-            className="btn btn-primary"
-            onClick={onGenerateReport}
-            disabled={!canGenerate}
-          >
-            {isGeneratingReport ? (
-              <>
-                <span className="spinner" />
-                Generating...
-              </>
-            ) : (
-              "Generate Report"
-            )}
-          </button>
-        </div>
-      )}
+      <div className="panel-footer">
+        <span className="panel-footer-info">
+          {activeRepos.length > 0 ? (
+            <>
+              Report will include{" "}
+              <strong>{activeRepos.length}</strong>{" "}
+              {activeRepos.length === 1 ? "repository" : "repositories"}
+            </>
+          ) : (
+            "No active repositories"
+          )}
+        </span>
+        <button
+          className="btn btn-primary"
+          onClick={onGenerateReport}
+          disabled={!canGenerate || isGenerating}
+        >
+          {isGenerating ? (
+            <>
+              <span className="spinner" />
+              Generating...
+            </>
+          ) : (
+            "Generate Report"
+          )}
+        </button>
+      </div>
     </div>
   );
 }
+
+

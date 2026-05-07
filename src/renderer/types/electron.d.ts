@@ -3,6 +3,10 @@ import type {
   GetReportParams,
   RepositoryCommitData,
   GitUserConfig,
+  GithubUserInfo,
+  GithubOrg,
+  GithubRepo,
+  GithubGetReportParams,
   GenerateReportParams,
   AddReportToHistoryParams,
   ReportHistoryEntry,
@@ -12,6 +16,9 @@ import type {
 } from "../../shared/types";
 
 export interface ElectronAPI {
+  // External operations
+  openExternal: (url: string) => Promise<void>;
+
   // Dialog operations
   selectDirectory: () => Promise<string | null>;
 
@@ -40,6 +47,22 @@ export interface ElectronAPI {
   // Config operations
   getConfig: () => Promise<AppConfig>;
   saveConfig: (config: Partial<AppConfig>) => Promise<AppConfig>;
+
+  // GitHub operations
+  saveGithubPat: (
+    pat: string,
+  ) => Promise<{ user: GithubUserInfo; orgs: GithubOrg[] }>;
+  getConnectedGithubUser: () => Promise<GithubUserInfo | null>;
+  getSavedGithubOrgs: () => Promise<GithubOrg[]>;
+  refreshGithubOrgs: () => Promise<GithubOrg[]>;
+  saveGithubOrgSelection: (login: string, selected: boolean) => Promise<void>;
+  getGithubOrgRepos: () => Promise<GithubRepo[]>;
+  getGithubReport: (
+    params: GithubGetReportParams,
+  ) => Promise<RepositoryCommitData[]>;
+  getActiveRepos: () => Promise<GithubRepository[]>;
+  addActiveRepo: (repo: GithubRepository) => Promise<void>;
+  removeActiveRepo: (fullName: string) => Promise<void>;
 }
 
 declare global {

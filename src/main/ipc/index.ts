@@ -3,6 +3,7 @@ import {
   registerGitHandlers,
   registerReportHandlers,
   registerConfigHandlers,
+  registerGithubHandlers,
 } from "./handlers";
 
 /**
@@ -14,4 +15,5 @@ export function registerAllIpcHandlers(): void {
   registerGitHandlers();
   registerReportHandlers();
   registerConfigHandlers();
+  registerGithubHandlers();
 }

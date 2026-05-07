@@ -132,21 +132,17 @@ export function registerReportHandlers(): void {
           throw new Error("Report not found");
         }
 
-        const isPdf = params.format === "pdf";
-        const extension = isPdf ? "pdf" : "docx";
-        const filterName = isPdf ? "PDF Documents" : "Word Documents";
-
         const now = new Date();
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, "0");
         const nameSuffix = entry.authorName.trim().replaceAll(/\s+/g, "_");
-        const defaultFileName = `${year}.${month}_${nameSuffix}.${extension}`;
+        const defaultFileName = `${year}.${month}_${nameSuffix}.docx`;
 
         const result = await dialog.showSaveDialog({
-          title: `Export Report as ${extension.toUpperCase()}`,
+          title: "Export Report as DOCX",
           defaultPath: defaultFileName,
           filters: [
-            { name: filterName, extensions: [extension] },
+            { name: "Word Documents", extensions: ["docx"] },
             { name: "All Files", extensions: ["*"] },
           ],
         });
@@ -161,10 +157,7 @@ export function registerReportHandlers(): void {
           repositoriesData: entry.repositoriesData,
         };
 
-        // Generate the document buffer based on format
-        const buffer = isPdf
-          ? await reportService.generatePdfReport(reportParams)
-          : await reportService.generateReport(reportParams);
+        const buffer = await reportService.generateReport(reportParams);
 
         writeFileSync(result.filePath, buffer);
 

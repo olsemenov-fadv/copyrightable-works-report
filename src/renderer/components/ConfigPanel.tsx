@@ -1,153 +1,295 @@
-import { useState, useEffect } from "react";
-import type { GitUserConfig } from "../../shared/types";
-import { UserIcon, MailIcon, CalendarIcon, UserCheckIcon } from "./Icons";
+import { useState } from "react";
+import type { AppConfig, GithubUserInfo, GithubOrg } from "../../shared/types";
+import {
+  UserIcon,
+  CalendarIcon,
+  UserCheckIcon,
+  AlertCircleIcon,
+  CheckIcon,
+} from "./Icons";
 
 interface ConfigPanelProps {
-  gitConfig: GitUserConfig | null;
-  sinceDate: string;
-  approver: string;
-  onSinceDateChange: (date: string) => void;
-  onApproverChange: (approver: string) => void;
+  config: AppConfig;
+  connectedGithubUser: GithubUserInfo | null;
+  savedOrgs: GithubOrg[];
+  isConnecting: boolean;
+  isRefreshingOrgs: boolean;
+  onSaveConfig: (config: Partial<AppConfig>) => Promise<void>;
+  onSavePat: (pat: string) => Promise<void>;
+  onToggleOrg: (login: string, selected: boolean) => Promise<void>;
+  onRefreshOrgs: () => Promise<void>;
 }
 
 export function ConfigPanel({
-  gitConfig,
-  sinceDate,
-  approver,
-  onSinceDateChange,
-  onApproverChange,
+  config,
+  connectedGithubUser,
+  savedOrgs,
+  isConnecting,
+  isRefreshingOrgs,
+  onSaveConfig,
+  onSavePat,
+  onToggleOrg,
+  onRefreshOrgs,
 }: ConfigPanelProps) {
-  const [localApprover, setLocalApprover] = useState(approver);
+  const [approver, setApprover] = useState(config.approver || "");
+  const [sinceDate, setSinceDate] = useState(config.sinceDate || "");
+  const [pat, setPat] = useState("");
+  const [isSavingConfig, setIsSavingConfig] = useState(false);
 
-  useEffect(() => {
-    setLocalApprover(approver);
-  }, [approver]);
-
-  const handleApproverBlur = () => {
-    if (localApprover !== approver) {
-      onApproverChange(localApprover);
+  const handleSaveConfig = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingConfig(true);
+    try {
+      await onSaveConfig({ approver, sinceDate: sinceDate || undefined });
+    } finally {
+      setIsSavingConfig(false);
     }
+  };
+
+  const handleConnectGithub = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!pat.trim()) return;
+    await onSavePat(pat.trim());
+    setPat("");
   };
 
   return (
     <div className="panel">
       <div className="panel-header">
         <h2 className="panel-title">Settings</h2>
-        <p className="panel-description">
-          Configure your Git identity and default options
-        </p>
+        <p className="panel-description">Configure your report preferences</p>
       </div>
 
-      <div className="panel-content">
+      <div className="panel-content panel-content-scroll">
+        {/* Report Settings */}
         <div className="config-section">
-          <h3 className="config-section-title">Git Identity</h3>
-          <p className="config-section-description">
-            These values are read from your global Git configuration
-          </p>
-
-          <div className="config-card">
-            <div className="config-item">
-              <div className="config-icon">
-                <UserIcon />
+          <h3 className="config-section-title">Report Settings</h3>
+          <form onSubmit={handleSaveConfig}>
+            <div className="config-card">
+              <div className="config-item">
+                <div className="config-icon">
+                  <UserCheckIcon />
+                </div>
+                <div className="config-details">
+                  <span className="config-label">Approver Name</span>
+                  <input
+                    type="text"
+                    className="config-input config-input-wide"
+                    placeholder="Full name of the approver"
+                    value={approver}
+                    onChange={(e) => setApprover(e.target.value)}
+                  />
+                </div>
               </div>
-              <div className="config-details">
-                <span className="config-label">Author Name</span>
-                <span className="config-value">
-                  {gitConfig?.name || (
-                    <span className="config-empty">Not configured</span>
-                  )}
-                </span>
+              <div className="config-item config-divider">
+                <div className="config-icon">
+                  <CalendarIcon />
+                </div>
+                <div className="config-details">
+                  <span className="config-label">Default "Since" Date</span>
+                  <input
+                    type="date"
+                    className="config-input"
+                    value={sinceDate}
+                    onChange={(e) => setSinceDate(e.target.value)}
+                  />
+                  <span
+                    className="config-value config-empty"
+                    style={{ fontSize: "0.75rem", marginTop: "0.25rem" }}
+                  >
+                    Leave blank to use the first day of the current month
+                  </span>
+                </div>
               </div>
             </div>
+            <div
+              style={{
+                marginTop: "0.75rem",
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isSavingConfig}
+              >
+                {isSavingConfig ? (
+                  <>
+                    <span className="spinner" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Settings"
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
 
-            <div className="config-divider" />
+        {/* GitHub Integration */}
+        <div className="config-section">
+          <h3 className="config-section-title">GitHub Integration</h3>
 
-            <div className="config-item">
-              <div className="config-icon">
-                <MailIcon />
-              </div>
-              <div className="config-details">
-                <span className="config-label">Email Address</span>
-                <span className="config-value">
-                  {gitConfig?.email || (
-                    <span className="config-empty">Not configured</span>
-                  )}
-                </span>
+          {connectedGithubUser && (
+            <div className="config-card" style={{ marginBottom: "0.75rem" }}>
+              <div className="config-item">
+                <div className="config-icon">
+                  <CheckIcon />
+                </div>
+                <div className="config-details">
+                  <span className="config-label">Connected Account</span>
+                  <span className="config-value">
+                    {connectedGithubUser.login}
+                    {connectedGithubUser.name && (
+                      <span
+                        className="config-empty"
+                        style={{ marginLeft: "0.5rem" }}
+                      >
+                        ({connectedGithubUser.name})
+                      </span>
+                    )}
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
+          )}
 
-          {!gitConfig?.name && !gitConfig?.email && (
+          <form onSubmit={handleConnectGithub}>
+            <div className="config-card">
+              <div className="config-item">
+                <div className="config-icon">
+                  <UserIcon />
+                </div>
+                <div className="config-details">
+                  <span className="config-label">
+                    {connectedGithubUser
+                      ? "Update Personal Access Token"
+                      : "Personal Access Token"}
+                  </span>
+                  <input
+                    type="password"
+                    className="config-input config-input-wide"
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                    value={pat}
+                    onChange={(e) => setPat(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+            </div>
             <div className="config-hint">
               <p>
-                To set your Git identity, run these commands in your terminal:
+                Requires <code>repo</code> and <code>read:org</code> scopes. The
+                token is encrypted and stored on your device.
               </p>
-              <code className="config-code">
-                git config --global user.name "Your Name"
-                <br />
-                git config --global user.email "your@email.com"
-              </code>
             </div>
-          )}
+            <div
+              style={{
+                marginTop: "0.75rem",
+                display: "flex",
+                justifyContent: "flex-end",
+              }}
+            >
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={isConnecting || !pat.trim()}
+              >
+                {isConnecting ? (
+                  <>
+                    <span className="spinner" />
+                    Connecting...
+                  </>
+                ) : connectedGithubUser ? (
+                  "Update Token"
+                ) : (
+                  "Connect GitHub"
+                )}
+              </button>
+            </div>
+          </form>
         </div>
 
-        <div className="config-section">
-          <h3 className="config-section-title">Report Options</h3>
-          <p className="config-section-description">
-            Configure default options for generating reports
-          </p>
-
-          <div className="config-card">
-            <div className="config-item">
-              <div className="config-icon">
-                <UserCheckIcon />
-              </div>
-              <div className="config-details">
-                <span className="config-label">Approver Name</span>
-                <input
-                  type="text"
-                  className="config-input config-input-wide"
-                  placeholder="Enter approver name for reports"
-                  value={localApprover}
-                  onChange={(e) => setLocalApprover(e.target.value)}
-                  onBlur={handleApproverBlur}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      handleApproverBlur();
-                    }
-                  }}
-                />
-              </div>
+        {/* Organizations */}
+        {connectedGithubUser && (
+          <div className="config-section">
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <h3 className="config-section-title" style={{ marginBottom: 0 }}>
+                Organizations
+              </h3>
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={onRefreshOrgs}
+                disabled={isRefreshingOrgs}
+                type="button"
+              >
+                {isRefreshingOrgs ? (
+                  <>
+                    <span className="spinner" />
+                    Refreshing...
+                  </>
+                ) : (
+                  "Refresh"
+                )}
+              </button>
             </div>
 
-            <div className="config-divider" />
-
-            <div className="config-item">
-              <div className="config-icon">
-                <CalendarIcon />
+            {savedOrgs.length === 0 ? (
+              <div className="panel-empty" style={{ minHeight: "120px" }}>
+                <AlertCircleIcon />
+                <p>No organizations found for this account.</p>
               </div>
-              <div className="config-details">
-                <span className="config-label">Default Start Date</span>
-                <input
-                  type="date"
-                  className="config-input"
-                  value={sinceDate}
-                  onChange={(e) => onSinceDateChange(e.target.value)}
-                />
+            ) : (
+              <div className="config-card">
+                {savedOrgs.map((org, i) => (
+                  <label
+                    key={org.login}
+                    className={`config-item${i > 0 ? " config-divider" : ""}`}
+                    style={{ cursor: "pointer" }}
+                  >
+                    <div className="config-icon">
+                      <input
+                        type="checkbox"
+                        checked={org.selected}
+                        onChange={(e) =>
+                          onToggleOrg(org.login, e.target.checked)
+                        }
+                        style={{ width: "16px", height: "16px" }}
+                      />
+                    </div>
+                    <div className="config-details">
+                      <span className="config-value">{org.login}</span>
+                      {org.description && (
+                        <span className="config-empty">{org.description}</span>
+                      )}
+                    </div>
+                  </label>
+                ))}
               </div>
-            </div>
+            )}
           </div>
-
-          {!approver && (
-            <div className="config-hint config-hint-warning">
-              <p>
-                ⚠️ The approver name is required for generating reports. Please
-                enter the name of the person who will approve your work.
-              </p>
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
   );
+}
+
+interface ConfigPanelProps {
+  config: AppConfig;
+  connectedGithubUser: GithubUserInfo | null;
+  savedOrgs: GithubOrg[];
+  isConnecting: boolean;
+  isRefreshingOrgs: boolean;
+  onSaveConfig: (config: Partial<AppConfig>) => Promise<void>;
+  onSavePat: (pat: string) => Promise<void>;
+  onToggleOrg: (login: string, selected: boolean) => Promise<void>;
+  onRefreshOrgs: () => Promise<void>;
 }

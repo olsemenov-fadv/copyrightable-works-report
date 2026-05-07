@@ -27,6 +27,7 @@
     "@electron-forge/plugin-fuses": "^7.11.1",
     "@electron-forge/plugin-vite": "^7.11.1",
     "@electron/fuses": "^1.8.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/electron-squirrel-startup": "^1.0.2",
     "@types/react": "^19.2.10",
     "@types/react-dom": "^19.2.3",
@@ -42,9 +43,9 @@
     "vite": "^5.4.21"
   },
   "dependencies": {
+    "better-sqlite3": "^12.9.0",
     "docx": "^9.5.1",
     "electron-squirrel-startup": "^1.0.1",
-    "libreoffice-convert": "^1.8.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "simple-git": "^3.36.0"
