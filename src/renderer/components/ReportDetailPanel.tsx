@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from "react";
-import type { ReportHistoryEntry, ExportFormat } from "../../shared/types";
+import { useState, useCallback } from "react";
+import { formatCommitDate } from "../../shared/utils/date";
+import type { ReportHistoryEntry } from "../../shared/types";
 import {
   ArrowLeftIcon,
   CopyIcon,
@@ -14,7 +15,7 @@ interface ReportDetailPanelProps {
   approver: string;
   onBack: () => void;
   onDelete: (id: string) => void;
-  onExport: (id: string, format: ExportFormat) => void;
+  onExport: (id: string) => void;
   isExporting?: boolean;
   isDeleting?: boolean;
 }
@@ -30,22 +31,6 @@ export function ReportDetailPanel({
 }: ReportDetailPanelProps) {
   const [copied, setCopied] = useState(false);
   const [expandedRepos, setExpandedRepos] = useState<Set<string>>(new Set());
-  const [showExportDropdown, setShowExportDropdown] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
-
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
-        setShowExportDropdown(false);
-      }
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   const reposWithCommits = report.repositoriesData.filter(
     (r) => r.commitCount > 0,
@@ -88,7 +73,12 @@ export function ReportDetailPanel({
       }
       reportText += `Commits: ${repo.commitCount}\n\n`;
       reportText += "```\n";
-      reportText += repo.commits;
+      reportText += repo.commits
+        .map(
+          (c) =>
+            `commit ${c.sha}\nAuthor: ${c.authorName} <${c.authorEmail}>\nDate:   ${c.date}\n\n    ${c.message}${c.body ? `\n\n${c.body}` : ""}`,
+        )
+        .join("\n\n");
       reportText += "\n```\n\n";
     }
 
@@ -139,50 +129,26 @@ export function ReportDetailPanel({
           </div>
         </div>
         <div className="panel-header-actions">
-          <div className="dropdown-container" ref={dropdownRef}>
-            <button
-              className="btn btn-primary btn-sm"
-              onClick={() => setShowExportDropdown(!showExportDropdown)}
-              disabled={isExporting || !approver}
-              title={
-                !approver
-                  ? "Configure approver name in settings first"
-                  : "Export report"
-              }
-            >
-              {isExporting ? (
-                <>
-                  <div className="spinner-sm" /> Exporting...
-                </>
-              ) : (
-                <>
-                  <DownloadIcon /> Export <ChevronDownIcon />
-                </>
-              )}
-            </button>
-            {showExportDropdown && (
-              <div className="dropdown-menu">
-                <button
-                  className="dropdown-item"
-                  onClick={() => {
-                    setShowExportDropdown(false);
-                    onExport(report.id, "docx");
-                  }}
-                >
-                  Export as DOCX
-                </button>
-                <button
-                  className="dropdown-item"
-                  onClick={() => {
-                    setShowExportDropdown(false);
-                    onExport(report.id, "pdf");
-                  }}
-                >
-                  Export as PDF
-                </button>
-              </div>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => onExport(report.id)}
+            disabled={isExporting || !approver}
+            title={
+              !approver
+                ? "Configure approver name in settings first"
+                : "Export as DOCX"
+            }
+          >
+            {isExporting ? (
+              <>
+                <div className="spinner-sm" /> Exporting...
+              </>
+            ) : (
+              <>
+                <DownloadIcon /> Export DOCX
+              </>
             )}
-          </div>
+          </button>
           <button
             className="btn btn-ghost btn-icon btn-danger"
             onClick={handleDelete}
@@ -212,7 +178,11 @@ export function ReportDetailPanel({
           <div className="report-detail-meta-row">
             <span className="report-detail-meta-label">Period</span>
             <span className="report-detail-meta-value">
-              From {report.sinceDate || "N/A"}
+              {report.sinceDate
+                ? report.untilDate
+                  ? `${report.sinceDate} – ${report.untilDate}`
+                  : `From ${report.sinceDate}`
+                : "Current month"}
             </span>
           </div>
         </div>
@@ -277,7 +247,46 @@ export function ReportDetailPanel({
                   </button>
                   {isExpanded && (
                     <div className="report-card-body">
-                      <pre className="report-card-commits">{repo.commits}</pre>
+                      {repo.commits.map((commit) => (
+                        <div key={commit.sha} className="commit-entry">
+                          <div className="commit-header">
+                            {commit.url ? (
+                              <a
+                                href={commit.url}
+                                className="commit-sha"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.electronAPI.openExternal(commit.url!);
+                                }}
+                              >
+                                {commit.sha.slice(0, 7)}
+                              </a>
+                            ) : (
+                              <span className="commit-sha">
+                                {commit.sha.slice(0, 7)}
+                              </span>
+                            )}
+                            <span className="commit-message">
+                              {commit.message}
+                            </span>
+                          </div>
+                          <div className="commit-meta">
+                            <span className="commit-author">
+                              {commit.authorName}{" "}
+                              <span className="commit-author-email">
+                                &lt;{commit.authorEmail}&gt;
+                              </span>
+                            </span>
+                            <span className="commit-date">
+                              {formatCommitDate(commit.date)}
+                            </span>
+                          </div>
+                          {commit.body && (
+                            <pre className="commit-body">{commit.body}</pre>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

@@ -20,6 +20,7 @@ import {
   writeFileSync,
   unlinkSync,
 } from "fs";
+import { databaseService } from "./database.service";
 import path from "node:path";
 import { app } from "electron";
 import type {
@@ -28,8 +29,9 @@ import type {
   ReportHistoryEntry,
   ReportHistory,
 } from "../../shared/types/report.types";
+import type { CommitEntry } from "../../shared/types/git.types";
+import { formatCommitDate } from "../../shared/utils/date";
 import { fileURLToPath } from "node:url";
-import libre from "libreoffice-convert";
 
 /**
  * Service responsible for generating DOCX reports from repository commit data
@@ -57,7 +59,6 @@ export class ReportService {
 
   private _templatePath: string | null = null;
   private _reportsDir: string | null = null;
-  private _historyPath: string | null = null;
 
   private get templatePath(): string {
     if (app.isPackaged) {
@@ -81,44 +82,12 @@ export class ReportService {
     return this._reportsDir;
   }
 
-  private get historyPath(): string {
-    if (!this._historyPath) {
-      this._historyPath = path.join(
-        app.getPath("userData"),
-        "report-history.json",
-      );
-    }
-    return this._historyPath;
-  }
-
   /**
    * Generates a DOCX report from repository commit data
    */
   async generateReport(params: GenerateReportParams): Promise<Buffer> {
     const updatedTemplate = await this.updateReport(params);
     return updatedTemplate;
-  }
-
-  /**
-   * Generates a PDF report by converting DOCX to PDF
-   * Requires LibreOffice to be installed on the system
-   */
-  async generatePdfReport(params: GenerateReportParams): Promise<Buffer> {
-    const docxBuffer = await this.generateReport(params);
-
-    return new Promise((resolve, reject) => {
-      libre.convert(docxBuffer, ".pdf", undefined, (err, result) => {
-        if (err) {
-          reject(
-            new Error(
-              `PDF conversion failed. Make sure LibreOffice is installed. Error: ${err.message}`,
-            ),
-          );
-        } else {
-          resolve(result);
-        }
-      });
-    });
   }
 
   /**
@@ -142,14 +111,16 @@ export class ReportService {
       authorName: params.fullName,
       reportingMonth: this.getReportingMonth(),
       sinceDate: params.sinceDate,
-      repositoryCount: params.repositoriesData.filter((r) => r.commits).length,
+      untilDate: params.untilDate,
+      repositoryCount: params.repositoriesData.filter((r) => r.commitCount > 0)
+        .length,
       totalCommits,
       status: totalCommits > 0 ? "has-commits" : "no-commits",
       repositoriesData: params.repositoriesData,
     };
 
     // Add to history
-    this.addToHistory(historyEntry);
+    databaseService.addReport(historyEntry);
 
     return historyEntry;
   }
@@ -158,8 +129,7 @@ export class ReportService {
    * Gets a report by its ID
    */
   getReportById(id: string): ReportHistoryEntry | null {
-    const history = this.getHistory();
-    return history.entries.find((e) => e.id === id) || null;
+    return databaseService.getReportById(id);
   }
 
   /**
@@ -169,14 +139,9 @@ export class ReportService {
     id: string,
     approver?: string,
   ): Promise<ReportHistoryEntry | null> {
-    const history = this.getHistory();
-    const entryIndex = history.entries.findIndex((e) => e.id === id);
+    const entry = databaseService.getReportById(id);
+    if (!entry) return null;
 
-    if (entryIndex === -1) {
-      return null;
-    }
-
-    const entry = history.entries[entryIndex];
     const docxBuffer = await this.generateReport({
       fullName: entry.authorName,
       approver,
@@ -189,14 +154,10 @@ export class ReportService {
     // Save the file
     writeFileSync(filePath, docxBuffer);
 
-    // Update the entry
-    entry.fileName = fileName;
-    entry.filePath = filePath;
+    // Update the entry in DB
+    databaseService.updateReport(id, { fileName, filePath });
 
-    // Save updated history
-    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
-
-    return entry;
+    return { ...entry, fileName, filePath };
   }
 
   /**
@@ -228,14 +189,15 @@ export class ReportService {
       authorName: params.fullName,
       reportingMonth: this.getReportingMonth(),
       sinceDate: "",
-      repositoryCount: params.repositoriesData.filter((r) => r.commits).length,
+      repositoryCount: params.repositoriesData.filter((r) => r.commitCount > 0)
+        .length,
       totalCommits,
       status: totalCommits > 0 ? "has-commits" : "no-commits",
       repositoriesData: params.repositoriesData,
     };
 
     // Add to history
-    this.addToHistory(historyEntry);
+    databaseService.addReport(historyEntry);
 
     return historyEntry;
   }
@@ -263,32 +225,12 @@ export class ReportService {
    * Retrieves all report history entries
    */
   getHistory(): ReportHistory {
-    if (!existsSync(this.historyPath)) {
-      return { entries: [] };
-    }
-
     try {
-      const data = readFileSync(this.historyPath, "utf-8");
-      return JSON.parse(data) as ReportHistory;
+      return { entries: databaseService.getReports() };
     } catch (error) {
       console.error("Error reading report history:", error);
       return { entries: [] };
     }
-  }
-
-  /**
-   * Adds a new entry to the history
-   */
-  private addToHistory(entry: ReportHistoryEntry): void {
-    const history = this.getHistory();
-    history.entries.unshift(entry); // Add to the beginning
-
-    // Keep only the last 50 entries
-    if (history.entries.length > 50) {
-      history.entries = history.entries.slice(0, 50);
-    }
-
-    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
   }
 
   /**
@@ -306,25 +248,15 @@ export class ReportService {
    * Deletes a report from history and disk
    */
   deleteReport(id: string): boolean {
-    const history = this.getHistory();
-    const entryIndex = history.entries.findIndex((e) => e.id === id);
+    const entry = databaseService.getReportById(id);
+    if (!entry) return false;
 
-    if (entryIndex === -1) {
-      return false;
-    }
-
-    const entry = history.entries[entryIndex];
-
-    // Delete the file if it exists
-    if (existsSync(entry.filePath)) {
+    // Delete the DOCX file if it exists
+    if (entry.filePath && existsSync(entry.filePath)) {
       unlinkSync(entry.filePath);
     }
 
-    // Remove from history
-    history.entries.splice(entryIndex, 1);
-    writeFileSync(this.historyPath, JSON.stringify(history, null, 2));
-
-    return true;
+    return databaseService.deleteReport(id);
   }
 
   /**
@@ -333,7 +265,7 @@ export class ReportService {
   private updateReport(params: GenerateReportParams): Promise<Buffer> {
     const repositoriesData = params.repositoriesData.map((repo) => ({
       repositoryLink: repo.repositoryLink,
-      commits: repo.commits,
+      commitsLog: this.formatCommitsAsGitLog(repo.commits),
     }));
 
     const document = patchDocument({
@@ -364,15 +296,36 @@ export class ReportService {
   }
 
   /**
+   * Converts CommitEntry[] to git-log formatted string for DOCX document generation
+   */
+  private formatCommitsAsGitLog(commits: CommitEntry[]): string {
+    return commits
+      .map((c) => {
+        const lines = [
+          `commit ${c.sha}`,
+          `Author: ${c.authorName} <${c.authorEmail}>`,
+          `Date:   ${formatCommitDate(c.date)}`,
+          "",
+          `    ${c.message}`,
+        ];
+        if (c.body) {
+          lines.push("", c.body);
+        }
+        return lines.join("\n");
+      })
+      .join("\n\n");
+  }
+
+  /**
    * Generates tables for all repositories with commits
    */
   private generateCommitsTables(
-    repositoriesData: { repositoryLink: string; commits: string }[],
+    repositoriesData: { repositoryLink: string; commitsLog: string }[],
   ) {
     return repositoriesData
-      .filter((entry) => !!entry.commits)
+      .filter((entry) => !!entry.commitsLog)
       .flatMap((entry) =>
-        this.createRepositoryEntry(entry.repositoryLink, entry.commits),
+        this.createRepositoryEntry(entry.repositoryLink, entry.commitsLog),
       );
   }
 

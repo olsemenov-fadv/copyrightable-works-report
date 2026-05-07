@@ -1,8 +1,8 @@
 import {
   registerDialogHandlers,
-  registerGitHandlers,
   registerReportHandlers,
   registerConfigHandlers,
+  registerGithubHandlers,
 } from "./handlers";
 
 /**
@@ -11,7 +11,7 @@ import {
  */
 export function registerAllIpcHandlers(): void {
   registerDialogHandlers();
-  registerGitHandlers();
   registerReportHandlers();
   registerConfigHandlers();
+  registerGithubHandlers();
 }

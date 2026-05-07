@@ -1,20 +1,8 @@
-import type { GitRepository } from "./git.types";
-
 /**
- * Saved repository (without selected state)
- */
-export interface SavedRepository {
-  name: string;
-  path: string;
-}
-
-/**
- * Application configuration that gets persisted
+ * Application configuration persisted in the database
  */
 export interface AppConfig {
   approver: string;
-  sinceDate?: string;
-  repositories: SavedRepository[];
 }
 
 /**
@@ -22,5 +10,4 @@ export interface AppConfig {
  */
 export const DEFAULT_CONFIG: AppConfig = {
   approver: "",
-  repositories: [],
 };

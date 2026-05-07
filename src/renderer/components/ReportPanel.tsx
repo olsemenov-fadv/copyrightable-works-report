@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { formatCommitDate } from "../../shared/utils/date";
 import type { RepositoryCommitData } from "../../shared/types";
 import {
   FileTextIcon,
@@ -58,7 +59,7 @@ export function ReportPanel({
 
   const copyReportToClipboard = useCallback(async () => {
     let report = "# Copyrightable Works Report\n\n";
-    report += `Generated: ${new Date().toLocaleDateString()}\n\n`;
+    report += `Generated: ${formatCommitDate(new Date().toISOString())}\n\n`;
 
     for (const repo of reposWithCommits) {
       report += `## ${repo.repositoryName}\n`;
@@ -67,7 +68,12 @@ export function ReportPanel({
       }
       report += `Commits: ${repo.commitCount}\n\n`;
       report += "```\n";
-      report += repo.commits;
+      report += repo.commits
+        .map(
+          (c) =>
+            `commit ${c.sha}\nAuthor: ${c.authorName} <${c.authorEmail}>\nDate:   ${formatCommitDate(c.date)}\n\n    ${c.message}${c.body ? `\n\n${c.body}` : ""}`,
+        )
+        .join("\n\n");
       report += "\n```\n\n";
     }
 
@@ -193,7 +199,46 @@ export function ReportPanel({
                   </button>
                   {isExpanded && (
                     <div className="report-card-body">
-                      <pre className="report-card-commits">{repo.commits}</pre>
+                      {repo.commits.map((commit) => (
+                        <div key={commit.sha} className="commit-entry">
+                          <div className="commit-header">
+                            {commit.url ? (
+                              <a
+                                href={commit.url}
+                                className="commit-sha"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  window.electronAPI.openExternal(commit.url!);
+                                }}
+                              >
+                                {commit.sha.slice(0, 7)}
+                              </a>
+                            ) : (
+                              <span className="commit-sha">
+                                {commit.sha.slice(0, 7)}
+                              </span>
+                            )}
+                            <span className="commit-message">
+                              {commit.message}
+                            </span>
+                          </div>
+                          <div className="commit-meta">
+                            <span className="commit-author">
+                              {commit.authorName}{" "}
+                              <span className="commit-author-email">
+                                &lt;{commit.authorEmail}&gt;
+                              </span>
+                            </span>
+                            <span className="commit-date">
+                              {formatCommitDate(commit.date)}
+                            </span>
+                          </div>
+                          {commit.body && (
+                            <pre className="commit-body">{commit.body}</pre>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>

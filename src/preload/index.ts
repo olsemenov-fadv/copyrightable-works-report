@@ -6,16 +6,18 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { IpcChannels } from "../shared/constants";
 import type {
-  GitRepository,
-  GetReportParams,
   RepositoryCommitData,
-  GitUserConfig,
+  GithubUserInfo,
+  GithubOrg,
+  GithubRepo,
+  GithubGetReportParams,
   GenerateReportParams,
   AddReportToHistoryParams,
   ReportHistoryEntry,
   ReportHistory,
   AppConfig,
   ExportReportParams,
+  GithubRepository,
 } from "../shared/types";
 
 /**
@@ -24,11 +26,7 @@ import type {
 export interface ElectronAPI {
   // Dialog operations
   selectDirectory: () => Promise<string | null>;
-
-  // Git operations
-  scanForRepositories: (directoryPath: string) => Promise<GitRepository[]>;
-  getUserConfig: () => Promise<GitUserConfig>;
-  getReport: (params: GetReportParams) => Promise<RepositoryCommitData[]>;
+  openExternal: (url: string) => Promise<void>;
 
   // Report operations
   generateAndSaveReport: (
@@ -50,6 +48,32 @@ export interface ElectronAPI {
   // Config operations
   getConfig: () => Promise<AppConfig>;
   saveConfig: (config: Partial<AppConfig>) => Promise<AppConfig>;
+
+  // GitHub operations
+  /** Validate PAT, encrypt+store, fetch+cache orgs. Returns user + org list. */
+  saveGithubPat: (
+    pat: string,
+  ) => Promise<{ user: GithubUserInfo; orgs: GithubOrg[] }>;
+  /** Returns the cached connected user (no API call). Null if no PAT configured. */
+  getConnectedGithubUser: () => Promise<GithubUserInfo | null>;
+  /** Returns cached orgs from DB (no API call). */
+  getSavedGithubOrgs: () => Promise<GithubOrg[]>;
+  /** Re-fetches orgs from GitHub API, overwrites cache, returns updated list. */
+  refreshGithubOrgs: () => Promise<GithubOrg[]>;
+  /** Toggle the selected flag for one org (persisted to DB). */
+  saveGithubOrgSelection: (login: string, selected: boolean) => Promise<void>;
+  /** Fetch repos live from API for all currently selected orgs. */
+  getGithubOrgRepos: () => Promise<GithubRepo[]>;
+  /** Fetch commit data for the given repos via GitHub API. */
+  getGithubReport: (
+    params: GithubGetReportParams,
+  ) => Promise<RepositoryCommitData[]>;
+  /** Get persisted active repos from DB. */
+  getActiveRepos: () => Promise<GithubRepository[]>;
+  /** Add a repo to the persisted active list. */
+  addActiveRepo: (repo: GithubRepository) => Promise<void>;
+  /** Remove a repo from the persisted active list. */
+  removeActiveRepo: (fullName: string) => Promise<void>;
 }
 
 // Expose the API to the renderer process
@@ -58,15 +82,8 @@ const electronAPI: ElectronAPI = {
   selectDirectory: (): Promise<string | null> =>
     ipcRenderer.invoke(IpcChannels.DIALOG_SELECT_DIRECTORY),
 
-  // Git operations
-  scanForRepositories: (directoryPath: string): Promise<GitRepository[]> =>
-    ipcRenderer.invoke(IpcChannels.GIT_SCAN_REPOSITORIES, directoryPath),
-
-  getUserConfig: (): Promise<GitUserConfig> =>
-    ipcRenderer.invoke(IpcChannels.GIT_GET_USER_CONFIG),
-
-  getReport: (params: GetReportParams): Promise<RepositoryCommitData[]> =>
-    ipcRenderer.invoke(IpcChannels.GIT_GET_REPORT, params),
+  openExternal: (url: string): Promise<void> =>
+    ipcRenderer.invoke(IpcChannels.SHELL_OPEN_EXTERNAL, url),
 
   // Report operations
   generateAndSaveReport: (
@@ -106,6 +123,34 @@ const electronAPI: ElectronAPI = {
 
   saveConfig: (config: Partial<AppConfig>): Promise<AppConfig> =>
     ipcRenderer.invoke(IpcChannels.CONFIG_SAVE, config),
+
+  // GitHub operations
+  saveGithubPat: (pat: string) =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_SAVE_PAT, pat),
+
+  getConnectedGithubUser: () =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_GET_CONNECTED_USER),
+
+  getSavedGithubOrgs: () =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_GET_SAVED_ORGS),
+
+  refreshGithubOrgs: () => ipcRenderer.invoke(IpcChannels.GITHUB_REFRESH_ORGS),
+
+  saveGithubOrgSelection: (login: string, selected: boolean) =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_SAVE_ORG_SELECTION, login, selected),
+
+  getGithubOrgRepos: () => ipcRenderer.invoke(IpcChannels.GITHUB_GET_ORG_REPOS),
+
+  getGithubReport: (params: GithubGetReportParams) =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_GET_REPORT, params),
+
+  getActiveRepos: () => ipcRenderer.invoke(IpcChannels.GITHUB_GET_ACTIVE_REPOS),
+
+  addActiveRepo: (repo: GithubRepository) =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_ADD_ACTIVE_REPO, repo),
+
+  removeActiveRepo: (fullName: string) =>
+    ipcRenderer.invoke(IpcChannels.GITHUB_REMOVE_ACTIVE_REPO, fullName),
 };
 
 contextBridge.exposeInMainWorld("electronAPI", electronAPI);

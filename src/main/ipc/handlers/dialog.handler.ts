@@ -1,4 +1,4 @@
-import { ipcMain, dialog } from "electron";
+import { ipcMain, dialog, shell } from "electron";
 import { IpcChannels } from "../../../shared/constants";
 
 /**
@@ -17,4 +17,14 @@ export function registerDialogHandlers(): void {
 
     return result.filePaths[0];
   });
+
+  ipcMain.handle(
+    IpcChannels.SHELL_OPEN_EXTERNAL,
+    async (_event, url: string): Promise<void> => {
+      // Only allow http/https URLs to prevent arbitrary protocol abuse
+      if (/^https?:\/\//i.test(url)) {
+        await shell.openExternal(url);
+      }
+    },
+  );
 }

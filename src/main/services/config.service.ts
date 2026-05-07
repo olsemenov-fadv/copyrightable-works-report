@@ -1,34 +1,20 @@
-import { existsSync, readFileSync, writeFileSync } from "fs";
-import path from "node:path";
-import { app } from "electron";
 import type { AppConfig } from "../../shared/types/config.types";
 import { DEFAULT_CONFIG } from "../../shared/types/config.types";
+import { databaseService } from "./database.service";
 
 /**
- * Service responsible for persisting application configuration
+ * Service responsible for persisting application configuration.
+ * Backed by the SQLite database (key-value store in the `config` table).
  */
 export class ConfigService {
-  private _configPath: string | null = null;
-
-  private get configPath(): string {
-    if (!this._configPath) {
-      this._configPath = path.join(app.getPath("userData"), "app-config.json");
-    }
-    return this._configPath;
-  }
-
   /**
    * Gets the current configuration
    */
   getConfig(): AppConfig {
-    if (!existsSync(this.configPath)) {
-      return { ...DEFAULT_CONFIG };
-    }
-
     try {
-      const data = readFileSync(this.configPath, "utf-8");
-      const config = JSON.parse(data) as Partial<AppConfig>;
-      return { ...DEFAULT_CONFIG, ...config };
+      const approver =
+        databaseService.getConfigValue("approver") ?? DEFAULT_CONFIG.approver;
+      return { approver };
     } catch (error) {
       console.error("Error reading config:", error);
       return { ...DEFAULT_CONFIG };
@@ -36,19 +22,17 @@ export class ConfigService {
   }
 
   /**
-   * Saves the configuration
+   * Saves a partial configuration (merges with existing values)
    */
   saveConfig(config: Partial<AppConfig>): AppConfig {
-    const currentConfig = this.getConfig();
-    const newConfig = { ...currentConfig, ...config };
-
     try {
-      writeFileSync(this.configPath, JSON.stringify(newConfig, null, 2));
+      if (config.approver !== undefined) {
+        databaseService.setConfigValue("approver", config.approver);
+      }
     } catch (error) {
       console.error("Error saving config:", error);
     }
-
-    return newConfig;
+    return this.getConfig();
   }
 }
 

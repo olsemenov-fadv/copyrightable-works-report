@@ -218,7 +218,74 @@ body {
   font-weight: 600;
 }
 
-/* Panel Empty State */
+/* ── Generate footer with date range ──────────────────────────────────────── */
+
+.panel-footer--generate {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.875rem 1.5rem;
+}
+
+.date-range-control {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Segmented toggle — uses existing btn styles */
+.date-range-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.date-range-toggle-btn {
+  padding: 0.375rem 0.875rem;
+  border: none;
+  border-right: 1px solid var(--border);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition:
+    background 0.15s,
+    color 0.15s;
+  white-space: nowrap;
+}
+
+.date-range-toggle-btn:last-child {
+  border-right: none;
+}
+
+.date-range-toggle-btn:hover:not(.date-range-toggle-btn--active) {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+.date-range-toggle-btn--active {
+  background: var(--primary);
+  color: white;
+  font-weight: 500;
+}
+
+/* Custom date inputs */
+.date-range-inputs {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.date-range-inputs-sep {
+  font-size: 0.8125rem;
+  color: var(--muted-foreground);
+}
+
 .panel-empty {
   display: flex;
   flex-direction: column;
@@ -600,6 +667,83 @@ body {
   overflow-x: auto;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+/* Commit Entries */
+.commit-entry {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.commit-entry:last-child {
+  border-bottom: none;
+}
+
+.commit-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.625rem;
+  margin-bottom: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.commit-sha {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--primary-color) 10%, transparent);
+  padding: 0.1rem 0.375rem;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+a.commit-sha:hover {
+  background: color-mix(in srgb, var(--primary-color) 20%, transparent);
+  text-decoration: none;
+}
+
+.commit-message {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--foreground);
+  line-height: 1.4;
+}
+
+.commit-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+  flex-wrap: wrap;
+}
+
+.commit-author {
+  font-weight: 500;
+}
+
+.commit-author-email {
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.commit-date {
+  opacity: 0.85;
+}
+
+.commit-body {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  background: var(--muted);
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--muted-foreground);
 }
 
 /* Config Panel */
@@ -1253,4 +1397,186 @@ body {
 
 .dropdown-item:not(:last-child) {
   border-bottom: 1px solid var(--border);
+}
+
+/* Repository Search Bar */
+.repo-search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--background);
+  flex-shrink: 0;
+}
+
+.repo-search svg {
+  width: 16px;
+  height: 16px;
+  color: var(--muted-foreground);
+  flex-shrink: 0;
+}
+
+.repo-search-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--foreground);
+  outline: none;
+}
+
+.repo-search-input::placeholder {
+  color: var(--muted-foreground);
+}
+
+/* Repository Picker (inline dropdown below header) */
+.repo-picker {
+  border-bottom: 1px solid var(--border);
+  background: var(--muted);
+  flex-shrink: 0;
+}
+
+.repo-picker-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 2rem 0.75rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.repo-picker-header .repo-search {
+  flex: 1;
+  padding: 0;
+  border-bottom: none;
+  background: transparent;
+}
+
+.repo-picker-list {
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.repo-picker-empty {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+}
+
+.repo-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.625rem 2rem;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.repo-picker-item:hover {
+  background: hsl(221 83% 53% / 0.07);
+}
+
+.repo-picker-item-icon {
+  color: var(--muted-foreground);
+  display: flex;
+  align-items: center;
+}
+
+.repo-picker-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.repo-picker-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.repo-picker-item-name {
+  display: block;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.repo-picker-item-org {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.repo-picker-item-add {
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+.repo-picker-item:hover .repo-picker-item-add {
+  opacity: 1;
+}
+
+.repo-picker-item-add svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Active Repo List */
+.active-repo-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.active-repo-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--background);
+}
+
+.active-repo-item-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius);
+  background: hsl(142 76% 36% / 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--success);
+}
+
+.active-repo-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.active-repo-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.active-repo-item-name {
+  display: block;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+.active-repo-item-org {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
 }
