@@ -229,11 +229,10 @@ export function App() {
           untilDate,
         });
 
+        const now = new Date();
         const effectiveSinceDate =
           sinceDate ||
-          new Date(new Date().getFullYear(), new Date().getMonth(), 1)
-            .toISOString()
-            .slice(0, 10);
+          `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
 
         const historyEntry = await window.electronAPI.addReportToHistory({
           fullName: connectedGithubUser.name || connectedGithubUser.login,
